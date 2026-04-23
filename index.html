@@ -13,6 +13,7 @@
     body {
       background: #0f172a;
       min-height: 100vh;
+      overflow: hidden;
       display: flex;
       flex-direction: column;
       align-items: center;
@@ -81,6 +82,7 @@
       height: 100%;
       image-rendering: pixelated;
       image-rendering: crisp-edges;
+      touch-action: none;
     }
     .loading {
       position: absolute;
@@ -130,12 +132,17 @@
       bottom: 20px;
       left: 20px;
       right: 20px;
+      pointer-events: none;
+      z-index: 5;
     }
     /* 竖屏手机 */
     @media (max-width: 768px) {
       .mobile-controls {
         display: flex;
         flex-direction: column;
+        left: max(14px, env(safe-area-inset-left));
+        right: max(14px, env(safe-area-inset-right));
+        bottom: max(14px, env(safe-area-inset-bottom));
       }
       .mobile-row {
         display: flex;
@@ -143,18 +150,21 @@
         align-items: center;
       }
       .mobile-btn {
-        width: 60px;
-        height: 60px;
+        width: clamp(52px, 15vw, 64px);
+        height: clamp(52px, 15vw, 64px);
         border-radius: 50%;
         background: rgba(30, 41, 59, 0.8);
         border: 2px solid #475569;
         color: #f1f5f9;
-        font-size: 24px;
+        font-size: clamp(18px, 6vw, 24px);
         display: flex;
         align-items: center;
         justify-content: center;
         user-select: none;
+        -webkit-user-select: none;
+        -webkit-touch-callout: none;
         touch-action: manipulation;
+        pointer-events: auto;
       }
       .mobile-btn:active {
         background: rgba(71, 85, 105, 0.8);
@@ -168,6 +178,11 @@
         background: rgba(220, 38, 38, 0.3) !important;
         border-color: #dc2626 !important;
       }
+      .mobile-btn--restart {
+        background: rgba(14, 165, 233, 0.28) !important;
+        border-color: #38bdf8 !important;
+        font-size: clamp(16px, 5vw, 20px);
+      }
       /* 隐藏桌面端控制说明 */
       .controls {
         display: none;
@@ -178,6 +193,9 @@
       .mobile-controls {
         display: flex;
         flex-direction: column;
+        bottom: max(10px, env(safe-area-inset-bottom));
+        left: max(10px, env(safe-area-inset-left));
+        right: max(10px, env(safe-area-inset-right));
       }
       .mobile-row {
         display: flex;
@@ -210,6 +228,11 @@
         background: rgba(220, 38, 38, 0.3) !important;
         border-color: #dc2626 !important;
       }
+      .mobile-btn--restart {
+        background: rgba(14, 165, 233, 0.28) !important;
+        border-color: #38bdf8 !important;
+        font-size: 18px;
+      }
       /* 横屏时隐藏控制说明 */
       .controls {
         display: none;
@@ -222,9 +245,9 @@
       }
       /* 横屏时按钮间距调整 */
       .mobile-controls {
-        bottom: 10px;
-        left: 10px;
-        right: 10px;
+        bottom: max(10px, env(safe-area-inset-bottom));
+        left: max(10px, env(safe-area-inset-left));
+        right: max(10px, env(safe-area-inset-right));
       }
     }
   </style>
@@ -241,6 +264,7 @@
           <button class="mobile-btn" id="btnRight">→</button>
         </div>
         <div class="mobile-actions">
+          <button class="mobile-btn mobile-btn--restart" id="btnRestart">↻</button>
           <button class="mobile-btn mobile-btn--attack" id="btnAttack">⚔</button>
           <button class="mobile-btn" id="btnJump">↑</button>
         </div>
@@ -1086,34 +1110,60 @@
     const btnRight = document.getElementById('btnRight');
     const btnJump = document.getElementById('btnJump');
     const btnAttack = document.getElementById('btnAttack');
+    const btnRestart = document.getElementById('btnRestart');
 
     if (btnLeft) {
       btnLeft.addEventListener('touchstart', (e) => { e.preventDefault(); keys['ArrowLeft'] = true; });
       btnLeft.addEventListener('touchend', (e) => { e.preventDefault(); keys['ArrowLeft'] = false; });
+      btnLeft.addEventListener('touchcancel', (e) => { e.preventDefault(); keys['ArrowLeft'] = false; });
       btnLeft.addEventListener('mousedown', () => { keys['ArrowLeft'] = true; });
       btnLeft.addEventListener('mouseup', () => { keys['ArrowLeft'] = false; });
+      btnLeft.addEventListener('mouseleave', () => { keys['ArrowLeft'] = false; });
     }
 
     if (btnRight) {
       btnRight.addEventListener('touchstart', (e) => { e.preventDefault(); keys['ArrowRight'] = true; });
       btnRight.addEventListener('touchend', (e) => { e.preventDefault(); keys['ArrowRight'] = false; });
+      btnRight.addEventListener('touchcancel', (e) => { e.preventDefault(); keys['ArrowRight'] = false; });
       btnRight.addEventListener('mousedown', () => { keys['ArrowRight'] = true; });
       btnRight.addEventListener('mouseup', () => { keys['ArrowRight'] = false; });
+      btnRight.addEventListener('mouseleave', () => { keys['ArrowRight'] = false; });
     }
 
     if (btnJump) {
       btnJump.addEventListener('touchstart', (e) => { e.preventDefault(); keys['ArrowUp'] = true; });
       btnJump.addEventListener('touchend', (e) => { e.preventDefault(); keys['ArrowUp'] = false; });
+      btnJump.addEventListener('touchcancel', (e) => { e.preventDefault(); keys['ArrowUp'] = false; });
       btnJump.addEventListener('mousedown', () => { keys['ArrowUp'] = true; });
       btnJump.addEventListener('mouseup', () => { keys['ArrowUp'] = false; });
+      btnJump.addEventListener('mouseleave', () => { keys['ArrowUp'] = false; });
     }
 
     if (btnAttack) {
       btnAttack.addEventListener('touchstart', (e) => { e.preventDefault(); keys['Space'] = true; });
       btnAttack.addEventListener('touchend', (e) => { e.preventDefault(); keys['Space'] = false; });
+      btnAttack.addEventListener('touchcancel', (e) => { e.preventDefault(); keys['Space'] = false; });
       btnAttack.addEventListener('mousedown', () => { keys['Space'] = true; });
       btnAttack.addEventListener('mouseup', () => { keys['Space'] = false; });
+      btnAttack.addEventListener('mouseleave', () => { keys['Space'] = false; });
     }
+
+    if (btnRestart) {
+      btnRestart.addEventListener('touchstart', (e) => {
+        e.preventDefault();
+        restartGame();
+      });
+      btnRestart.addEventListener('mousedown', () => {
+        restartGame();
+      });
+    }
+
+    window.addEventListener('blur', () => {
+      keys['ArrowLeft'] = false;
+      keys['ArrowRight'] = false;
+      keys['ArrowUp'] = false;
+      keys['Space'] = false;
+    });
 
     // Update game state
     function update(deltaMs) {
