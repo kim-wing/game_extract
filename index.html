@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Xiao'xia Game</title>
+  <title>小侠游戏</title>
   <style>
     * {
       margin: 0;
@@ -341,12 +341,12 @@
 <body>
   <div class="game-container">
     <canvas id="gameCanvas"></canvas>
-    <div id="loading" class="loading">Loading...</div>
+    <div id="loading" class="loading">加载中...</div>
     
     <div class="mobile-controls">
       <div class="mobile-row">
         <div class="mobile-stick">
-          <div class="mobile-joystick" id="joystick" aria-label="Move control">
+          <div class="mobile-joystick" id="joystick" aria-label="移动控制">
             <div class="mobile-joystick-knob" id="joystickKnob"></div>
           </div>
         </div>
@@ -360,14 +360,14 @@
   </div>
   
   <div class="controls">
-    <h2>Controls</h2>
+    <h2>操作</h2>
     <div class="key-list">
-      <span class="key"><span class="key-badge">←→</span> Move</span>
-      <span class="key"><span class="key-badge">↑</span> Jump</span>
-      <span class="key"><span class="key-badge">Space</span> Attack</span>
-      <span class="key"><span class="key-badge">Shift</span> Walk</span>
-      <span class="key"><span class="key-badge">F</span> Action</span>
-      <span class="key"><span class="key-badge">R</span> Restart</span>
+      <span class="key"><span class="key-badge">←→</span> 移动</span>
+      <span class="key"><span class="key-badge">↑</span> 跳跃</span>
+      <span class="key"><span class="key-badge">空格</span> 攻击</span>
+      <span class="key"><span class="key-badge">⇧</span> 慢走</span>
+      <span class="key"><span class="key-badge">F</span> 跳舞</span>
+      <span class="key"><span class="key-badge">R</span> 重开</span>
     </div>
   </div>
 
@@ -479,7 +479,7 @@
       phase: 'playing',
       transitionTimer: 0,
       bannerTimer: 150,
-      bannerText: 'LEVEL 1'
+      bannerText: '第 1 关'
     };
 
     function getLevelConfig(level) {
@@ -500,7 +500,7 @@
       levelState.phase = 'playing';
       levelState.transitionTimer = 0;
       levelState.bannerTimer = 130;
-      levelState.bannerText = `LEVEL ${level}`;
+      levelState.bannerText = `第 ${level} 关`;
       monsterSpawnTimer = Math.max(0, config.spawnInterval - 35);
     }
 
@@ -508,7 +508,7 @@
       levelState.phase = 'cleared';
       levelState.transitionTimer = 130;
       levelState.bannerTimer = 130;
-      levelState.bannerText = 'CLEAR';
+      levelState.bannerText = '过关';
       state.hp = Math.min(state.maxHp, state.hp + 1);
       createCollisionParticles(state.x, state.y - SPRITE_DRAW_HEIGHT * 0.55, '#bef264');
     }
@@ -517,7 +517,7 @@
       easterState.bossKilled = true;
       levelState.phase = 'won';
       levelState.bannerTimer = 999999;
-      levelState.bannerText = 'SECRET CLEAR';
+      levelState.bannerText = '隐藏通关';
       createCollisionParticles(EASTER_BOSS_X, GROUND_Y - MONSTER_HEIGHT, '#fde047');
       createCollisionParticles(state.x, state.y - SPRITE_DRAW_HEIGHT * 0.45, '#fef08a');
       monsters.length = 0;
@@ -610,25 +610,25 @@
     const POWERUP_SIZE = 26;
     const POWERUP_TYPES = {
       power: {
-        label: 'ATK UP',
+        label: '攻击提升',
         color: '#facc15',
         accent: '#f97316',
         duration: 720
       },
       heal: {
-        label: 'HEAL',
+        label: '回复',
         color: '#fb7185',
         accent: '#fff1f2',
         duration: 0
       },
       speed: {
-        label: 'SPEED',
+        label: '加速',
         color: '#38bdf8',
         accent: '#e0f2fe',
         duration: 600
       },
       relic: {
-        label: 'INVINCIBLE ATK',
+        label: '获得无敌攻击力',
         color: '#fef08a',
         accent: '#facc15',
         duration: 0
@@ -658,8 +658,12 @@
         easterState.relicCollected = true;
         state.attackPower = 999;
         state.attackBoostTimer = Infinity;
-        state.invulnTimer = Math.max(state.invulnTimer, 180);
       } else if (powerup.type === 'power') {
+        if (easterState.relicCollected) {
+          state.pickupText = '无敌攻击力已生效';
+          createCollisionParticles(powerup.x, powerup.y, config.color);
+          return;
+        }
         state.attackPower = 2;
         state.attackBoostTimer = config.duration;
       } else if (powerup.type === 'heal') {
@@ -717,12 +721,24 @@
         ctx.fillRect(8, 7, 10, 10);
 
         if (p.type === 'relic') {
+          ctx.translate(-13, -12);
+          ctx.fillStyle = 'rgba(15, 23, 42, 0.28)';
+          ctx.fillRect(4, 43, 46, 5);
+          ctx.fillStyle = '#7c2d12';
+          ctx.fillRect(24, 12, 7, 34);
+          ctx.fillStyle = '#92400e';
+          ctx.fillRect(26, 10, 5, 32);
+          ctx.fillStyle = '#f8fafc';
+          ctx.fillRect(11, 2, 24, 11);
+          ctx.fillRect(6, 9, 34, 13);
+          ctx.fillRect(13, 22, 20, 7);
+          ctx.fillStyle = '#cbd5e1';
+          ctx.fillRect(9, 13, 27, 5);
+          ctx.fillRect(18, 25, 14, 4);
+          ctx.fillStyle = '#facc15';
+          ctx.fillRect(20, 8, 8, 8);
           ctx.fillStyle = '#713f12';
-          ctx.fillRect(11, 5, 5, 16);
-          ctx.fillRect(7, 11, 13, 4);
-          ctx.fillStyle = '#fefce8';
-          ctx.fillRect(12, 8, 3, 3);
-          ctx.fillRect(12, 15, 3, 3);
+          ctx.fillRect(24, 16, 6, 4);
         } else if (p.type === 'power') {
           ctx.fillStyle = '#78350f';
           ctx.fillRect(12, 4, 3, 16);
@@ -842,6 +858,10 @@
     function spawnEasterBoss() {
       if (easterState.bossSpawned || easterState.bossKilled) return;
       easterState.bossSpawned = true;
+      if (!easterState.relicCollected) {
+        state.pickupText = '去远方找巨斧';
+        state.pickupTextTimer = 150;
+      }
       monsters.push({
         type: 'boss',
         palette: MONSTER_TYPES.boss,
@@ -895,10 +915,10 @@
       }
     }
 
-    function hitPlayer(sourceX) {
-      if (state.invulnTimer > 0 || state.danceInvulnTimer > 0 || easterState.relicCollected) return;
+    function hitPlayer(sourceX, damage = 1) {
+      if (state.invulnTimer > 0 || state.danceInvulnTimer > 0) return;
 
-      state.hp = Math.max(0, state.hp - 1);
+      state.hp = Math.max(0, state.hp - damage);
       state.hurtTimer = 18;
       state.invulnTimer = 70;
       state.x += sourceX < state.x ? 18 : -18;
@@ -907,7 +927,7 @@
       if (state.hp <= 0) {
         levelState.phase = 'gameover';
         levelState.bannerTimer = 999999;
-        levelState.bannerText = 'GAME OVER';
+        levelState.bannerText = '游戏结束';
       }
     }
 
@@ -976,7 +996,7 @@
             const hitDx = Math.abs(state.x - (m.x + m.facing * 18));
             const hitDy = Math.abs(state.y - m.y);
             if (hitDx <= MONSTER_ATTACK_RANGE && hitDy < 76) {
-              hitPlayer(m.x);
+              hitPlayer(m.x, m.isBoss ? state.maxHp / 2 : 1);
             }
             m.hasAttackHit = true;
           }
@@ -1183,9 +1203,9 @@
       ctx.strokeRect(CANVAS_WIDTH - 180, 18, 158, 52);
 
       ctx.fillStyle = '#f8fafc';
-      ctx.fillText(`LEVEL ${levelState.level}`, CANVAS_WIDTH - 168, 27);
+      ctx.fillText(`关卡 ${levelState.level}`, CANVAS_WIDTH - 168, 27);
       ctx.fillStyle = '#cbd5e1';
-      ctx.fillText(`TOTAL ${levelState.totalKills}`, CANVAS_WIDTH - 82, 27);
+      ctx.fillText(`击败 ${levelState.totalKills}`, CANVAS_WIDTH - 82, 27);
 
       ctx.fillStyle = '#334155';
       ctx.fillRect(CANVAS_WIDTH - 168, 51, 134, 7);
@@ -1199,12 +1219,12 @@
         const alpha = Math.min(1, levelState.bannerTimer / 28);
         const title = levelState.bannerText;
         const subtitle = levelState.phase === 'cleared'
-          ? 'HP +1  NEXT WAVE'
+          ? '生命 +1  下一波'
           : levelState.phase === 'gameover'
-            ? 'PRESS R TO RESTART'
+            ? '按 R 重开'
             : levelState.phase === 'won'
-              ? 'YOU FOUND THE EASTER ENDING'
-              : `${levelState.targetKills} MONSTERS + DROPS`;
+              ? '你发现了隐藏结局'
+              : `目标 ${levelState.targetKills} 只怪物 + 掉落`;
 
         ctx.globalAlpha = alpha;
         ctx.textAlign = 'center';
@@ -1239,7 +1259,7 @@
           if (m.isBoss && !easterState.relicCollected) {
             m.flashTimer = 18;
             m.stunTimer = 18;
-            state.pickupText = 'NEED RELIC';
+            state.pickupText = '去远方找巨斧';
             state.pickupTextTimer = 65;
             createCollisionParticles(m.x, m.y - MONSTER_HEIGHT, '#a855f7');
             return;
@@ -1684,7 +1704,7 @@
     function onBgImageLoad() {
       bgImagesLoaded++;
       if (bgImagesLoaded === totalBgImages) {
-        console.log('All background images loaded');
+        console.log('背景图片加载完成');
       }
     }
     
@@ -1818,17 +1838,17 @@
 
       ctx.font = '700 11px ui-monospace, SFMono-Regular, Menlo, monospace';
       ctx.fillStyle = state.attackBoostTimer > 0 ? '#facc15' : '#cbd5e1';
-      ctx.fillText(`ATK ${state.attackPower}`, 22, 34);
+      ctx.fillText(`攻击 ${state.attackPower}`, 22, 34);
       if (state.speedBoostTimer > 0) {
         ctx.fillStyle = '#38bdf8';
-        ctx.fillText('SPD', 76, 34);
+        ctx.fillText('加速', 86, 34);
       }
       if (easterState.relicCollected) {
         ctx.fillStyle = '#fef08a';
-        ctx.fillText('RELIC', 104, 34);
+        ctx.fillText('巨斧', 124, 34);
       }
       ctx.fillStyle = '#e2e8f0';
-      ctx.fillText(`${Math.round(state.x / METER_TO_WORLD)}m`, 22, 48);
+      ctx.fillText(`${Math.round(state.x / METER_TO_WORLD)}米`, 22, 48);
 
       drawLevelHud();
 
