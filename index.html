@@ -1333,7 +1333,7 @@
       // Check input states
       const left = keys['ArrowLeft'] || keys['KeyA'] || (virtualMove.active && virtualMove.dx < -0.25);
       const right = keys['ArrowRight'] || keys['KeyD'] || (virtualMove.active && virtualMove.dx > 0.25);
-      const up = keys['ArrowUp'] || keys['KeyW'] || keys['Space'] || (virtualMove.active && virtualMove.dy < -0.55);
+      const up = keys['ArrowUp'] || keys['KeyW'] || (virtualMove.active && virtualMove.dy < -0.55);
       const attack = keys['Space'];
       const walk = keys['ShiftLeft'] || keys['ShiftRight'];
       const action = keys['KeyF'];
