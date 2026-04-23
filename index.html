@@ -148,6 +148,17 @@
         display: flex;
         justify-content: space-between;
         align-items: center;
+        gap: 12px;
+      }
+      .mobile-move {
+        display: flex;
+        flex-direction: column;
+        gap: 10px;
+        align-items: flex-start;
+      }
+      .mobile-move-row {
+        display: flex;
+        gap: 12px;
       }
       .mobile-btn {
         width: clamp(52px, 15vw, 64px);
@@ -173,6 +184,7 @@
       .mobile-actions {
         display: flex;
         gap: 12px;
+        align-items: center;
       }
       .mobile-btn--attack {
         background: rgba(220, 38, 38, 0.3) !important;
@@ -205,6 +217,17 @@
         display: flex;
         justify-content: space-between;
         align-items: center;
+        gap: 10px;
+      }
+      .mobile-move {
+        display: flex;
+        flex-direction: column;
+        gap: 8px;
+        align-items: flex-start;
+      }
+      .mobile-move-row {
+        display: flex;
+        gap: 10px;
       }
       .mobile-btn {
         width: 50px;
@@ -227,6 +250,7 @@
       .mobile-actions {
         display: flex;
         gap: 10px;
+        align-items: center;
       }
       .mobile-btn--attack {
         background: rgba(220, 38, 38, 0.3) !important;
@@ -267,15 +291,17 @@
     
     <div class="mobile-controls">
       <div class="mobile-row">
-        <div style="display: flex; gap: 12px;">
-          <button class="mobile-btn" id="btnLeft">←</button>
-          <button class="mobile-btn" id="btnRight">→</button>
+        <div class="mobile-move">
+          <button class="mobile-btn" id="btnJump">↑</button>
+          <div class="mobile-move-row">
+            <button class="mobile-btn" id="btnLeft">←</button>
+            <button class="mobile-btn" id="btnRight">→</button>
+          </div>
         </div>
         <div class="mobile-actions">
           <button class="mobile-btn mobile-btn--restart" id="btnRestart">↻</button>
           <button class="mobile-btn mobile-btn--dance" id="btnDance">♪</button>
           <button class="mobile-btn mobile-btn--attack" id="btnAttack">⚔</button>
-          <button class="mobile-btn" id="btnJump">↑</button>
         </div>
       </div>
     </div>
@@ -337,6 +363,7 @@
         loop: false
       }
     };
+    const DANCE_INVULN_MS = Math.round((ANIMATIONS.dance.frames / ANIMATIONS.dance.fps) * 1000);
 
     // Game state
     const state = {
@@ -356,6 +383,7 @@
       hasAttackHit: false,
       hurtTimer: 0,
       invulnTimer: 0,
+      danceInvulnTimer: 0,
       hp: 5,
       maxHp: 5,
       attackPower: 1,
@@ -423,6 +451,7 @@
       state.pickupTextTimer = 0;
       state.hurtTimer = 0;
       state.invulnTimer = 0;
+      state.danceInvulnTimer = 0;
       state.isAttacking = false;
       state.isDancing = false;
       state.currentAnim = 'idle';
@@ -694,7 +723,7 @@
     }
 
     function hitPlayer(sourceX) {
-      if (state.invulnTimer > 0) return;
+      if (state.invulnTimer > 0 || state.danceInvulnTimer > 0) return;
 
       state.hp = Math.max(0, state.hp - 1);
       state.hurtTimer = 18;
@@ -1216,6 +1245,7 @@
         state.currentAnim = 'dance';
         state.frameIndex = 0;
         state.frameTimer = 0;
+        state.danceInvulnTimer = DANCE_INVULN_MS;
       }
 
       // Handle attack
@@ -1330,6 +1360,13 @@
         state.invulnTimer -= step;
       }
 
+      if (state.danceInvulnTimer > 0) {
+        state.danceInvulnTimer -= deltaMs;
+        if (state.danceInvulnTimer < 0) {
+          state.danceInvulnTimer = 0;
+        }
+      }
+
       if (levelState.bannerTimer > 0 && levelState.phase !== 'gameover') {
         levelState.bannerTimer -= step;
       }
@@ -1359,6 +1396,7 @@
               state.frameIndex = 0;
               if (state.currentAnim === 'dance') {
                 state.isDancing = false;
+                state.danceInvulnTimer = 0;
                 state.currentAnim = 'idle';
               }
             }
