@@ -387,6 +387,12 @@
     const SPEED_WALK = 1.5;
     const FRAME_MS = 1000 / 60;
     const MAX_DELTA_MS = 50;
+    const PLAYER_START_X = 0;
+    const CAMERA_TARGET_X = CANVAS_WIDTH * 0.48;
+    const METER_TO_WORLD = 8;
+    const EASTER_DISTANCE_M = 500;
+    const EASTER_RELIC_X = -EASTER_DISTANCE_M * METER_TO_WORLD;
+    const EASTER_BOSS_X = EASTER_DISTANCE_M * METER_TO_WORLD;
     
     // Animation configs
     const ANIMATIONS = {
@@ -417,9 +423,13 @@
     };
     const DANCE_INVULN_MS = Math.round((ANIMATIONS.dance.frames / ANIMATIONS.dance.fps) * 1000);
 
+    const camera = {
+      x: PLAYER_START_X - CAMERA_TARGET_X
+    };
+
     // Game state
     const state = {
-      x: CANVAS_WIDTH / 2,
+      x: PLAYER_START_X,
       y: GROUND_Y,
       vx: 0,
       vy: 0,
@@ -444,6 +454,22 @@
       pickupText: '',
       pickupTextTimer: 0
     };
+
+    const easterState = {
+      relicSpawned: false,
+      relicCollected: false,
+      bossSpawned: false,
+      bossKilled: false
+    };
+
+    function worldToScreenX(x) {
+      return x - camera.x;
+    }
+
+    function updateCamera() {
+      const targetX = state.x - CAMERA_TARGET_X;
+      camera.x += (targetX - camera.x) * 0.18;
+    }
 
     const levelState = {
       level: 1,
@@ -487,11 +513,21 @@
       createCollisionParticles(state.x, state.y - SPRITE_DRAW_HEIGHT * 0.55, '#bef264');
     }
 
+    function completeEasterEnding() {
+      easterState.bossKilled = true;
+      levelState.phase = 'won';
+      levelState.bannerTimer = 999999;
+      levelState.bannerText = 'SECRET CLEAR';
+      createCollisionParticles(EASTER_BOSS_X, GROUND_Y - MONSTER_HEIGHT, '#fde047');
+      createCollisionParticles(state.x, state.y - SPRITE_DRAW_HEIGHT * 0.45, '#fef08a');
+      monsters.length = 0;
+    }
+
     function restartGame() {
       monsters.length = 0;
       powerups.length = 0;
       particles.length = 0;
-      state.x = CANVAS_WIDTH / 2;
+      state.x = PLAYER_START_X;
       state.y = GROUND_Y;
       state.vx = 0;
       state.vy = 0;
@@ -501,6 +537,14 @@
       state.speedBoostTimer = 0;
       state.pickupText = '';
       state.pickupTextTimer = 0;
+      easterState.relicSpawned = false;
+      easterState.relicCollected = false;
+      easterState.bossSpawned = false;
+      easterState.bossKilled = false;
+      camera.x = PLAYER_START_X - CAMERA_TARGET_X;
+      bgLayers.forEach(layer => {
+        layer.offset = 0;
+      });
       state.hurtTimer = 0;
       state.invulnTimer = 0;
       state.danceInvulnTimer = 0;
@@ -549,11 +593,13 @@
     
     function drawParticles() {
       particles.forEach(p => {
+        const x = worldToScreenX(p.x);
+        if (x < -40 || x > CANVAS_WIDTH + 40) return;
         const alpha = p.life / p.maxLife;
         ctx.globalAlpha = alpha;
         ctx.fillStyle = p.color;
         ctx.beginPath();
-        ctx.arc(p.x, p.y, p.size * alpha, 0, Math.PI * 2);
+        ctx.arc(x, p.y, p.size * alpha, 0, Math.PI * 2);
         ctx.fill();
       });
       ctx.globalAlpha = 1;
@@ -580,18 +626,25 @@
         color: '#38bdf8',
         accent: '#e0f2fe',
         duration: 600
+      },
+      relic: {
+        label: 'INVINCIBLE ATK',
+        color: '#fef08a',
+        accent: '#facc15',
+        duration: 0
       }
     };
 
-    function spawnPowerup(x, y) {
+    function spawnPowerup(x, y, forcedType = null, persistent = false) {
       const roll = Math.random();
-      const type = roll < 0.45 ? 'power' : roll < 0.72 ? 'heal' : 'speed';
+      const type = forcedType || (roll < 0.45 ? 'power' : roll < 0.72 ? 'heal' : 'speed');
       powerups.push({
         type,
         x,
         y: y - 40,
         vy: -2.6,
-        life: 720,
+        life: persistent ? Infinity : 720,
+        persistent,
         bob: Math.random() * Math.PI * 2
       });
     }
@@ -601,7 +654,12 @@
       state.pickupText = config.label;
       state.pickupTextTimer = 95;
 
-      if (powerup.type === 'power') {
+      if (powerup.type === 'relic') {
+        easterState.relicCollected = true;
+        state.attackPower = 999;
+        state.attackBoostTimer = Infinity;
+        state.invulnTimer = Math.max(state.invulnTimer, 180);
+      } else if (powerup.type === 'power') {
         state.attackPower = 2;
         state.attackBoostTimer = config.duration;
       } else if (powerup.type === 'heal') {
@@ -645,7 +703,9 @@
       powerups.forEach(p => {
         const config = POWERUP_TYPES[p.type];
         const y = p.y + Math.sin(p.bob) * 3;
-        const x = p.x;
+        const x = worldToScreenX(p.x);
+
+        if (x < -80 || x > CANVAS_WIDTH + 80) return;
 
         ctx.save();
         ctx.translate(Math.round(x - POWERUP_SIZE / 2), Math.round(y - POWERUP_SIZE / 2));
@@ -656,7 +716,14 @@
         ctx.fillStyle = config.accent;
         ctx.fillRect(8, 7, 10, 10);
 
-        if (p.type === 'power') {
+        if (p.type === 'relic') {
+          ctx.fillStyle = '#713f12';
+          ctx.fillRect(11, 5, 5, 16);
+          ctx.fillRect(7, 11, 13, 4);
+          ctx.fillStyle = '#fefce8';
+          ctx.fillRect(12, 8, 3, 3);
+          ctx.fillRect(12, 15, 3, 3);
+        } else if (p.type === 'power') {
           ctx.fillStyle = '#78350f';
           ctx.fillRect(12, 4, 3, 16);
           ctx.fillRect(8, 10, 11, 3);
@@ -719,6 +786,16 @@
         dark: '#0284c7',
         accent: '#38bdf8',
         cheek: '#f0abfc'
+      },
+      boss: {
+        name: 'BOSS',
+        hpBonus: 0,
+        speedMul: 0,
+        color: '#c084fc',
+        mid: '#e9d5ff',
+        dark: '#7e22ce',
+        accent: '#facc15',
+        cheek: '#fda4af'
       }
     };
 
@@ -734,7 +811,7 @@
       const type = chooseMonsterType(levelState.level);
       const typeConfig = MONSTER_TYPES[type];
       const side = Math.random() < 0.5 ? 'left' : 'right';
-      const x = side === 'left' ? -MONSTER_WIDTH : CANVAS_WIDTH + MONSTER_WIDTH;
+      const x = side === 'left' ? camera.x - MONSTER_WIDTH : camera.x + CANVAS_WIDTH + MONSTER_WIDTH;
       const hp = Math.max(1, config.monsterHp + typeConfig.hpBonus);
       const speed = config.monsterSpeed * typeConfig.speedMul;
       
@@ -762,9 +839,53 @@
       });
     }
 
+    function spawnEasterBoss() {
+      if (easterState.bossSpawned || easterState.bossKilled) return;
+      easterState.bossSpawned = true;
+      monsters.push({
+        type: 'boss',
+        palette: MONSTER_TYPES.boss,
+        x: EASTER_BOSS_X,
+        y: GROUND_Y - MONSTER_FOOT_OFFSET,
+        vx: 0,
+        speed: 0.62,
+        facing: -1,
+        hp: 999,
+        maxHp: 999,
+        isBoss: true,
+        isDead: false,
+        isAttacking: false,
+        flashTimer: 0,
+        stunTimer: 0,
+        collisionFxTimer: 0,
+        attackTimer: 0,
+        attackCooldown: 35,
+        hasAttackHit: false,
+        animTimer: 0,
+        animFrame: 0,
+        state: 'guard',
+        drawScale: 2.55
+      });
+    }
+
+    function ensureEasterContent() {
+      if (!easterState.relicSpawned) {
+        easterState.relicSpawned = true;
+        spawnPowerup(EASTER_RELIC_X, GROUND_Y, 'relic', true);
+      }
+
+      if (state.x >= EASTER_BOSS_X - CANVAS_WIDTH * 0.75) {
+        spawnEasterBoss();
+      }
+    }
+
     function onMonsterKilled(monster) {
       if (monster.countedKill) return;
       monster.countedKill = true;
+      if (monster.isBoss) {
+        completeEasterEnding();
+        return;
+      }
       levelState.kills++;
       levelState.totalKills++;
       levelState.bannerTimer = Math.max(levelState.bannerTimer, 24);
@@ -775,13 +896,12 @@
     }
 
     function hitPlayer(sourceX) {
-      if (state.invulnTimer > 0 || state.danceInvulnTimer > 0) return;
+      if (state.invulnTimer > 0 || state.danceInvulnTimer > 0 || easterState.relicCollected) return;
 
       state.hp = Math.max(0, state.hp - 1);
       state.hurtTimer = 18;
       state.invulnTimer = 70;
       state.x += sourceX < state.x ? 18 : -18;
-      state.x = Math.max(SPRITE_DRAW_WIDTH / 2, Math.min(CANVAS_WIDTH - SPRITE_DRAW_WIDTH / 2, state.x));
       createCollisionParticles(state.x, state.y - SPRITE_DRAW_HEIGHT * 0.45, '#facc15');
 
       if (state.hp <= 0) {
@@ -792,7 +912,7 @@
     }
 
     function updateMonsters(step) {
-      if (levelState.phase === 'gameover') return;
+      if (levelState.phase === 'gameover' || levelState.phase === 'won') return;
 
       // Spawn new monsters (max 2 at a time)
       const config = getLevelConfig(levelState.level);
@@ -806,9 +926,9 @@
         if (levelState.transitionTimer <= 0) {
           startLevel(levelState.level + 1);
         }
-      } else if (levelState.kills >= levelState.targetKills && aliveMonsters === 0) {
+      } else if (levelState.phase === 'playing' && levelState.kills >= levelState.targetKills && aliveMonsters === 0) {
         clearLevel();
-      } else if (levelState.kills < levelState.targetKills && aliveMonsters < config.maxMonsters) {
+      } else if (levelState.phase === 'playing' && levelState.kills < levelState.targetKills && aliveMonsters < config.maxMonsters) {
         monsterSpawnTimer += step;
         if (monsterSpawnTimer >= config.spawnInterval) {
           spawnMonster();
@@ -868,7 +988,7 @@
           }
         }
 
-        const intendedVx = m.stunTimer > 0 || m.isAttacking ? 0 : m.facing * m.speed;
+        const intendedVx = m.isBoss || m.stunTimer > 0 || m.isAttacking ? 0 : m.facing * m.speed;
         const nextX = m.x + intendedVx * step;
         const dx = nextX - state.x;
         const dy = m.y - state.y;
@@ -921,7 +1041,7 @@
         }
 
         // Remove if off screen
-        if (m.x < -MONSTER_WIDTH * 2 || m.x > CANVAS_WIDTH + MONSTER_WIDTH * 2) {
+        if (!m.isBoss && (m.x < camera.x - MONSTER_WIDTH * 2 || m.x > camera.x + CANVAS_WIDTH + MONSTER_WIDTH * 2)) {
           monsters.splice(i, 1);
         }
       }
@@ -950,17 +1070,24 @@
       const paw = attacking ? '#fef3c7' : '#dcfce7';
       const eye = attacking ? '#fff7ed' : '#f8fafc';
       const pupil = '#111827';
+      const drawScale = m.drawScale || MONSTER_DRAW_SCALE;
+      const screenX = worldToScreenX(m.x);
 
       ctx.save();
-      ctx.translate(Math.round(m.x + m.facing * lunge), Math.round(m.y + bob));
-      ctx.scale(m.facing * MONSTER_DRAW_SCALE * stretch, MONSTER_DRAW_SCALE * squash);
+      ctx.translate(Math.round(screenX + m.facing * lunge), Math.round(m.y + bob));
+      ctx.scale(m.facing * drawScale * stretch, drawScale * squash);
       ctx.translate(-24, -58);
 
       ctx.fillStyle = 'rgba(15, 23, 42, 0.35)';
       ctx.fillRect(8, 55, 34, 5);
 
       // Type marker
-      if (m.type === 'berry') {
+      if (m.type === 'boss') {
+        pixelRect(9, 2, 8, 10, '#facc15');
+        pixelRect(31, 2, 8, 10, '#facc15');
+        pixelRect(16, 0, 16, 7, bodyDark);
+        pixelRect(20, -3, 8, 5, '#fde047');
+      } else if (m.type === 'berry') {
         pixelRect(14, 4, 22, 8, bodyDark);
         pixelRect(17, 1, 5, 6, '#16a34a');
         pixelRect(24, 1, 8, 5, '#4ade80');
@@ -1033,9 +1160,12 @@
         // HP bar
         const hpPercent = m.hp / m.maxHp;
         ctx.fillStyle = '#1f2937';
-        ctx.fillRect(m.x - 25, m.y - MONSTER_HEIGHT - 8, 50, 5);
-        ctx.fillStyle = hpPercent > 0.5 ? '#22c55e' : '#ef4444';
-        ctx.fillRect(m.x - 25, m.y - MONSTER_HEIGHT - 8, 50 * hpPercent, 5);
+        const screenX = worldToScreenX(m.x);
+        const barWidth = m.isBoss ? 86 : 50;
+        const barY = m.y - (m.isBoss ? 150 : MONSTER_HEIGHT + 8);
+        ctx.fillRect(screenX - barWidth / 2, barY, barWidth, 5);
+        ctx.fillStyle = m.isBoss && !easterState.relicCollected ? '#a855f7' : (hpPercent > 0.5 ? '#22c55e' : '#ef4444');
+        ctx.fillRect(screenX - barWidth / 2, barY, barWidth * hpPercent, 5);
       });
     }
 
@@ -1072,7 +1202,9 @@
           ? 'HP +1  NEXT WAVE'
           : levelState.phase === 'gameover'
             ? 'PRESS R TO RESTART'
-            : `${levelState.targetKills} MONSTERS + DROPS`;
+            : levelState.phase === 'won'
+              ? 'YOU FOUND THE EASTER ENDING'
+              : `${levelState.targetKills} MONSTERS + DROPS`;
 
         ctx.globalAlpha = alpha;
         ctx.textAlign = 'center';
@@ -1104,7 +1236,15 @@
         const hitDistance = attackRange + MONSTER_WIDTH / 2;
         
         if (dx * dx + dy * dy < hitDistance * hitDistance) {
-          // Hit!
+          if (m.isBoss && !easterState.relicCollected) {
+            m.flashTimer = 18;
+            m.stunTimer = 18;
+            state.pickupText = 'NEED RELIC';
+            state.pickupTextTimer = 65;
+            createCollisionParticles(m.x, m.y - MONSTER_HEIGHT, '#a855f7');
+            return;
+          }
+
           m.hp -= state.attackPower;
           m.flashTimer = 15; // Flash for 15 frames
           m.stunTimer = 60; // Stun for 60 frames (1 second at 60fps)
@@ -1190,7 +1330,7 @@
     // Input handling
     window.addEventListener('keydown', (e) => {
       keys[e.code] = true;
-      if (e.code === 'KeyR' && levelState.phase === 'gameover') {
+      if (e.code === 'KeyR' && (levelState.phase === 'gameover' || levelState.phase === 'won')) {
         restartGame();
       }
       
@@ -1343,6 +1483,12 @@
         return;
       }
 
+      if (levelState.phase === 'won') {
+        updateParticles(step);
+        updateCamera();
+        return;
+      }
+
       if (state.attackBoostTimer > 0) {
         state.attackBoostTimer -= step;
         if (state.attackBoostTimer <= 0) {
@@ -1450,10 +1596,9 @@
         state.isGrounded = true;
       }
 
-      // Screen boundaries - keep character in view
-      const margin = SPRITE_DRAW_WIDTH / 2;
-      state.x = Math.max(margin, Math.min(CANVAS_WIDTH - margin, state.x));
       const actualMove = state.x - oldX;
+      updateCamera();
+      ensureEasterContent();
 
       // Update parallax background scrolling based on INTENDED movement
       // Background moves in SAME direction as character
@@ -1678,6 +1823,12 @@
         ctx.fillStyle = '#38bdf8';
         ctx.fillText('SPD', 76, 34);
       }
+      if (easterState.relicCollected) {
+        ctx.fillStyle = '#fef08a';
+        ctx.fillText('RELIC', 104, 34);
+      }
+      ctx.fillStyle = '#e2e8f0';
+      ctx.fillText(`${Math.round(state.x / METER_TO_WORLD)}m`, 22, 48);
 
       drawLevelHud();
 
@@ -1692,7 +1843,8 @@
           ctx.globalAlpha = 0.58;
         }
         
-        const drawX = state.x - SPRITE_DRAW_WIDTH / 2;
+        const playerScreenX = worldToScreenX(state.x);
+        const drawX = playerScreenX - SPRITE_DRAW_WIDTH / 2;
         const drawY = state.y - SPRITE_DRAW_HEIGHT;
         
         if (state.facing === -1) {
@@ -1720,7 +1872,7 @@
         ctx.textAlign = 'center';
         ctx.font = '800 14px ui-monospace, SFMono-Regular, Menlo, monospace';
         ctx.fillStyle = '#fef9c3';
-        ctx.fillText(state.pickupText, state.x, state.y - SPRITE_DRAW_HEIGHT - 18);
+        ctx.fillText(state.pickupText, worldToScreenX(state.x), state.y - SPRITE_DRAW_HEIGHT - 18);
         ctx.restore();
       }
 
