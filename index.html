@@ -518,9 +518,33 @@
       levelState.phase = 'won';
       levelState.bannerTimer = 999999;
       levelState.bannerText = '隐藏通关';
+      state.isAttacking = false;
+      state.isDancing = true;
+      state.vx = 0;
+      state.vy = 0;
+      state.currentAnim = 'dance';
+      state.frameIndex = 0;
+      state.frameTimer = 0;
+      state.danceInvulnTimer = Infinity;
       createCollisionParticles(EASTER_BOSS_X, GROUND_Y - MONSTER_HEIGHT, '#fde047');
       createCollisionParticles(state.x, state.y - SPRITE_DRAW_HEIGHT * 0.45, '#fef08a');
       monsters.length = 0;
+    }
+
+    function updateVictoryDance(deltaMs, step) {
+      updateParticles(step);
+      updateCamera();
+
+      const anim = ANIMATIONS.dance;
+      state.currentAnim = 'dance';
+      state.isDancing = true;
+      state.frameTimer += deltaMs;
+      const frameDuration = 1000 / anim.fps;
+
+      if (state.frameTimer >= frameDuration) {
+        state.frameTimer -= frameDuration;
+        state.frameIndex = (state.frameIndex + 1) % anim.frames;
+      }
     }
 
     function restartGame() {
@@ -1504,8 +1528,7 @@
       }
 
       if (levelState.phase === 'won') {
-        updateParticles(step);
-        updateCamera();
+        updateVictoryDance(deltaMs, step);
         return;
       }
 
