@@ -178,6 +178,10 @@
         background: rgba(220, 38, 38, 0.3) !important;
         border-color: #dc2626 !important;
       }
+      .mobile-btn--dance {
+        background: rgba(250, 204, 21, 0.25) !important;
+        border-color: #facc15 !important;
+      }
       .mobile-btn--restart {
         background: rgba(14, 165, 233, 0.28) !important;
         border-color: #38bdf8 !important;
@@ -228,6 +232,10 @@
         background: rgba(220, 38, 38, 0.3) !important;
         border-color: #dc2626 !important;
       }
+      .mobile-btn--dance {
+        background: rgba(250, 204, 21, 0.25) !important;
+        border-color: #facc15 !important;
+      }
       .mobile-btn--restart {
         background: rgba(14, 165, 233, 0.28) !important;
         border-color: #38bdf8 !important;
@@ -265,6 +273,7 @@
         </div>
         <div class="mobile-actions">
           <button class="mobile-btn mobile-btn--restart" id="btnRestart">↻</button>
+          <button class="mobile-btn mobile-btn--dance" id="btnDance">♪</button>
           <button class="mobile-btn mobile-btn--attack" id="btnAttack">⚔</button>
           <button class="mobile-btn" id="btnJump">↑</button>
         </div>
@@ -320,6 +329,12 @@
         columns: 5,
         fps: 18,
         loop: false
+      },
+      dance: {
+        frames: 25,
+        columns: 5,
+        fps: 15,
+        loop: false
       }
     };
 
@@ -332,6 +347,7 @@
       facing: 1, // 1 = right, -1 = left
       isGrounded: true,
       isAttacking: false,
+      isDancing: false,
       isWalking: false,
       currentAnim: 'idle',
       frameIndex: 0,
@@ -408,6 +424,7 @@
       state.hurtTimer = 0;
       state.invulnTimer = 0;
       state.isAttacking = false;
+      state.isDancing = false;
       state.currentAnim = 'idle';
       state.frameIndex = 0;
       state.frameTimer = 0;
@@ -1035,7 +1052,7 @@
     const images = {};
     const spriteFrames = {};
     let imagesLoaded = 0;
-    const totalImages = 3;
+    const totalImages = 4;
 
     function buildSpriteFrameCache() {
       Object.keys(ANIMATIONS).forEach((name) => {
@@ -1087,6 +1104,7 @@
     loadImage('idle', 'idle.png');
     loadImage('run', 'run.png');
     loadImage('attack', 'attack.png');
+    loadImage('dance', 'dance.png');
 
     // Input handling
     window.addEventListener('keydown', (e) => {
@@ -1111,6 +1129,7 @@
     const btnJump = document.getElementById('btnJump');
     const btnAttack = document.getElementById('btnAttack');
     const btnRestart = document.getElementById('btnRestart');
+    const btnDance = document.getElementById('btnDance');
 
     if (btnLeft) {
       btnLeft.addEventListener('touchstart', (e) => { e.preventDefault(); keys['ArrowLeft'] = true; });
@@ -1148,6 +1167,15 @@
       btnAttack.addEventListener('mouseleave', () => { keys['Space'] = false; });
     }
 
+    if (btnDance) {
+      btnDance.addEventListener('touchstart', (e) => { e.preventDefault(); keys['KeyF'] = true; });
+      btnDance.addEventListener('touchend', (e) => { e.preventDefault(); keys['KeyF'] = false; });
+      btnDance.addEventListener('touchcancel', (e) => { e.preventDefault(); keys['KeyF'] = false; });
+      btnDance.addEventListener('mousedown', () => { keys['KeyF'] = true; });
+      btnDance.addEventListener('mouseup', () => { keys['KeyF'] = false; });
+      btnDance.addEventListener('mouseleave', () => { keys['KeyF'] = false; });
+    }
+
     if (btnRestart) {
       btnRestart.addEventListener('touchstart', (e) => {
         e.preventDefault();
@@ -1163,6 +1191,7 @@
       keys['ArrowRight'] = false;
       keys['ArrowUp'] = false;
       keys['Space'] = false;
+      keys['KeyF'] = false;
     });
 
     // Update game state
@@ -1196,8 +1225,16 @@
         state.pickupTextTimer -= step;
       }
 
+      // Handle dance
+      if (action && !state.isAttacking && !state.isDancing && state.isGrounded) {
+        state.isDancing = true;
+        state.currentAnim = 'dance';
+        state.frameIndex = 0;
+        state.frameTimer = 0;
+      }
+
       // Handle attack
-      if (attack && !state.isAttacking && state.isGrounded) {
+      if (attack && !state.isAttacking && !state.isDancing && state.isGrounded) {
         state.isAttacking = true;
         state.attackTimer = 0;
         state.currentAnim = 'attack';
@@ -1222,8 +1259,8 @@
         }
       }
 
-      // Handle movement (only if not attacking)
-      if (!state.isAttacking) {
+      // Handle movement (only if not locked in an action)
+      if (!state.isAttacking && !state.isDancing) {
         state.isWalking = walk;
         const speedMultiplier = state.speedBoostTimer > 0 ? 1.35 : 1;
         const speed = (walk ? SPEED_WALK : SPEED_RUN) * speedMultiplier;
@@ -1257,7 +1294,7 @@
       }
 
       // Handle jumping
-      if (up && state.isGrounded && !state.isAttacking) {
+      if (up && state.isGrounded && !state.isAttacking && !state.isDancing) {
         state.vy = JUMP_FORCE;
         state.isGrounded = false;
       }
@@ -1329,7 +1366,18 @@
         
         if (state.frameTimer >= frameDuration) {
           state.frameTimer -= frameDuration;
-          state.frameIndex = (state.frameIndex + 1) % anim.frames;
+          state.frameIndex++;
+          if (state.frameIndex >= anim.frames) {
+            if (anim.loop) {
+              state.frameIndex = 0;
+            } else {
+              state.frameIndex = 0;
+              if (state.currentAnim === 'dance') {
+                state.isDancing = false;
+                state.currentAnim = 'idle';
+              }
+            }
+          }
         }
       }
     }
