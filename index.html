@@ -132,8 +132,8 @@
       bottom: 20px;
       left: 20px;
       right: 20px;
-      pointer-events: none;
       z-index: 5;
+      pointer-events: auto;
     }
     /* 竖屏手机 */
     @media (max-width: 768px) {
@@ -1131,59 +1131,44 @@
     const btnRestart = document.getElementById('btnRestart');
     const btnDance = document.getElementById('btnDance');
 
-    if (btnLeft) {
-      btnLeft.addEventListener('touchstart', (e) => { e.preventDefault(); keys['ArrowLeft'] = true; });
-      btnLeft.addEventListener('touchend', (e) => { e.preventDefault(); keys['ArrowLeft'] = false; });
-      btnLeft.addEventListener('touchcancel', (e) => { e.preventDefault(); keys['ArrowLeft'] = false; });
-      btnLeft.addEventListener('mousedown', () => { keys['ArrowLeft'] = true; });
-      btnLeft.addEventListener('mouseup', () => { keys['ArrowLeft'] = false; });
-      btnLeft.addEventListener('mouseleave', () => { keys['ArrowLeft'] = false; });
+    function bindHoldButton(button, key) {
+      if (!button) return;
+
+      const press = (e) => {
+        e.preventDefault();
+        keys[key] = true;
+      };
+      const release = (e) => {
+        if (e) e.preventDefault();
+        keys[key] = false;
+      };
+
+      button.addEventListener('pointerdown', press);
+      button.addEventListener('pointerup', release);
+      button.addEventListener('pointercancel', release);
+      button.addEventListener('pointerleave', release);
+      button.addEventListener('touchstart', press, { passive: false });
+      button.addEventListener('touchend', release, { passive: false });
+      button.addEventListener('touchcancel', release, { passive: false });
+      button.addEventListener('mousedown', press);
+      button.addEventListener('mouseup', release);
+      button.addEventListener('mouseleave', release);
     }
 
-    if (btnRight) {
-      btnRight.addEventListener('touchstart', (e) => { e.preventDefault(); keys['ArrowRight'] = true; });
-      btnRight.addEventListener('touchend', (e) => { e.preventDefault(); keys['ArrowRight'] = false; });
-      btnRight.addEventListener('touchcancel', (e) => { e.preventDefault(); keys['ArrowRight'] = false; });
-      btnRight.addEventListener('mousedown', () => { keys['ArrowRight'] = true; });
-      btnRight.addEventListener('mouseup', () => { keys['ArrowRight'] = false; });
-      btnRight.addEventListener('mouseleave', () => { keys['ArrowRight'] = false; });
-    }
-
-    if (btnJump) {
-      btnJump.addEventListener('touchstart', (e) => { e.preventDefault(); keys['ArrowUp'] = true; });
-      btnJump.addEventListener('touchend', (e) => { e.preventDefault(); keys['ArrowUp'] = false; });
-      btnJump.addEventListener('touchcancel', (e) => { e.preventDefault(); keys['ArrowUp'] = false; });
-      btnJump.addEventListener('mousedown', () => { keys['ArrowUp'] = true; });
-      btnJump.addEventListener('mouseup', () => { keys['ArrowUp'] = false; });
-      btnJump.addEventListener('mouseleave', () => { keys['ArrowUp'] = false; });
-    }
-
-    if (btnAttack) {
-      btnAttack.addEventListener('touchstart', (e) => { e.preventDefault(); keys['Space'] = true; });
-      btnAttack.addEventListener('touchend', (e) => { e.preventDefault(); keys['Space'] = false; });
-      btnAttack.addEventListener('touchcancel', (e) => { e.preventDefault(); keys['Space'] = false; });
-      btnAttack.addEventListener('mousedown', () => { keys['Space'] = true; });
-      btnAttack.addEventListener('mouseup', () => { keys['Space'] = false; });
-      btnAttack.addEventListener('mouseleave', () => { keys['Space'] = false; });
-    }
-
-    if (btnDance) {
-      btnDance.addEventListener('touchstart', (e) => { e.preventDefault(); keys['KeyF'] = true; });
-      btnDance.addEventListener('touchend', (e) => { e.preventDefault(); keys['KeyF'] = false; });
-      btnDance.addEventListener('touchcancel', (e) => { e.preventDefault(); keys['KeyF'] = false; });
-      btnDance.addEventListener('mousedown', () => { keys['KeyF'] = true; });
-      btnDance.addEventListener('mouseup', () => { keys['KeyF'] = false; });
-      btnDance.addEventListener('mouseleave', () => { keys['KeyF'] = false; });
-    }
+    bindHoldButton(btnLeft, 'ArrowLeft');
+    bindHoldButton(btnRight, 'ArrowRight');
+    bindHoldButton(btnJump, 'ArrowUp');
+    bindHoldButton(btnAttack, 'Space');
+    bindHoldButton(btnDance, 'KeyF');
 
     if (btnRestart) {
-      btnRestart.addEventListener('touchstart', (e) => {
+      const restart = (e) => {
         e.preventDefault();
         restartGame();
-      });
-      btnRestart.addEventListener('mousedown', () => {
-        restartGame();
-      });
+      };
+      btnRestart.addEventListener('pointerdown', restart);
+      btnRestart.addEventListener('touchstart', restart, { passive: false });
+      btnRestart.addEventListener('mousedown', restart);
     }
 
     window.addEventListener('blur', () => {
