@@ -858,10 +858,10 @@
     function spawnEasterBoss() {
       if (easterState.bossSpawned || easterState.bossKilled) return;
       easterState.bossSpawned = true;
-      if (!easterState.relicCollected) {
-        state.pickupText = '去远方找巨斧';
-        state.pickupTextTimer = 150;
-      }
+      state.pickupText = easterState.relicCollected
+        ? '爷爷饶命啊'
+        : '黄皮小儿没有神兵也敢来送命！';
+      state.pickupTextTimer = 150;
       monsters.push({
         type: 'boss',
         palette: MONSTER_TYPES.boss,
@@ -1259,7 +1259,7 @@
           if (m.isBoss && !easterState.relicCollected) {
             m.flashTimer = 18;
             m.stunTimer = 18;
-            state.pickupText = '去远方找巨斧';
+            state.pickupText = '黄皮小儿没有神兵也敢来送命！';
             state.pickupTextTimer = 65;
             createCollisionParticles(m.x, m.y - MONSTER_HEIGHT, '#a855f7');
             return;
