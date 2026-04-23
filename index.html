@@ -147,18 +147,14 @@
       .mobile-row {
         display: flex;
         justify-content: space-between;
-        align-items: center;
+        align-items: flex-end;
         gap: 12px;
       }
-      .mobile-move {
+      .mobile-stick {
         display: flex;
-        flex-direction: column;
-        gap: 10px;
-        align-items: flex-start;
-      }
-      .mobile-move-row {
-        display: flex;
-        gap: 12px;
+        align-items: flex-end;
+        justify-content: flex-start;
+        min-width: clamp(118px, 34vw, 160px);
       }
       .mobile-btn {
         width: clamp(52px, 15vw, 64px);
@@ -181,10 +177,41 @@
         background: rgba(71, 85, 105, 0.8);
         transform: scale(0.95);
       }
+      .mobile-joystick {
+        width: clamp(118px, 30vw, 160px);
+        height: clamp(118px, 30vw, 160px);
+        border-radius: 50%;
+        background: rgba(15, 23, 42, 0.45);
+        border: 2px solid rgba(148, 163, 184, 0.55);
+        position: relative;
+        overflow: hidden;
+        touch-action: none;
+        pointer-events: auto;
+      }
+      .mobile-joystick::before {
+        content: '';
+        position: absolute;
+        inset: 18%;
+        border-radius: 50%;
+        border: 1px solid rgba(148, 163, 184, 0.22);
+      }
+      .mobile-joystick-knob {
+        width: 42%;
+        height: 42%;
+        border-radius: 50%;
+        position: absolute;
+        left: 29%;
+        top: 29%;
+        background: radial-gradient(circle at 30% 30%, #cbd5e1 0%, #64748b 55%, #334155 100%);
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+        transform: translate(0, 0);
+        transition: transform 70ms linear;
+        pointer-events: none;
+      }
       .mobile-actions {
         display: flex;
         gap: 12px;
-        align-items: center;
+        align-items: flex-end;
       }
       .mobile-btn--attack {
         background: rgba(220, 38, 38, 0.3) !important;
@@ -216,18 +243,14 @@
       .mobile-row {
         display: flex;
         justify-content: space-between;
-        align-items: center;
+        align-items: flex-end;
         gap: 10px;
       }
-      .mobile-move {
+      .mobile-stick {
         display: flex;
-        flex-direction: column;
-        gap: 8px;
-        align-items: flex-start;
-      }
-      .mobile-move-row {
-        display: flex;
-        gap: 10px;
+        align-items: flex-end;
+        justify-content: flex-start;
+        min-width: 118px;
       }
       .mobile-btn {
         width: 50px;
@@ -247,10 +270,41 @@
         background: rgba(71, 85, 105, 0.8);
         transform: scale(0.95);
       }
+      .mobile-joystick {
+        width: 118px;
+        height: 118px;
+        border-radius: 50%;
+        background: rgba(15, 23, 42, 0.45);
+        border: 2px solid rgba(148, 163, 184, 0.55);
+        position: relative;
+        overflow: hidden;
+        touch-action: none;
+        pointer-events: auto;
+      }
+      .mobile-joystick::before {
+        content: '';
+        position: absolute;
+        inset: 18%;
+        border-radius: 50%;
+        border: 1px solid rgba(148, 163, 184, 0.22);
+      }
+      .mobile-joystick-knob {
+        width: 42%;
+        height: 42%;
+        border-radius: 50%;
+        position: absolute;
+        left: 29%;
+        top: 29%;
+        background: radial-gradient(circle at 30% 30%, #cbd5e1 0%, #64748b 55%, #334155 100%);
+        box-shadow: 0 8px 24px rgba(0, 0, 0, 0.35);
+        transform: translate(0, 0);
+        transition: transform 70ms linear;
+        pointer-events: none;
+      }
       .mobile-actions {
         display: flex;
         gap: 10px;
-        align-items: center;
+        align-items: flex-end;
       }
       .mobile-btn--attack {
         background: rgba(220, 38, 38, 0.3) !important;
@@ -291,11 +345,9 @@
     
     <div class="mobile-controls">
       <div class="mobile-row">
-        <div class="mobile-move">
-          <button class="mobile-btn" id="btnJump">↑</button>
-          <div class="mobile-move-row">
-            <button class="mobile-btn" id="btnLeft">←</button>
-            <button class="mobile-btn" id="btnRight">→</button>
+        <div class="mobile-stick">
+          <div class="mobile-joystick" id="joystick" aria-label="Move control">
+            <div class="mobile-joystick-knob" id="joystickKnob"></div>
           </div>
         </div>
         <div class="mobile-actions">
@@ -1153,12 +1205,16 @@
     });
 
     // Mobile controls
-    const btnLeft = document.getElementById('btnLeft');
-    const btnRight = document.getElementById('btnRight');
-    const btnJump = document.getElementById('btnJump');
+    const joystick = document.getElementById('joystick');
+    const joystickKnob = document.getElementById('joystickKnob');
     const btnAttack = document.getElementById('btnAttack');
     const btnRestart = document.getElementById('btnRestart');
     const btnDance = document.getElementById('btnDance');
+    const virtualMove = {
+      active: false,
+      dx: 0,
+      dy: 0
+    };
 
     function bindHoldButton(button, key) {
       if (!button) return;
@@ -1184,11 +1240,73 @@
       button.addEventListener('mouseleave', release);
     }
 
-    bindHoldButton(btnLeft, 'ArrowLeft');
-    bindHoldButton(btnRight, 'ArrowRight');
-    bindHoldButton(btnJump, 'ArrowUp');
     bindHoldButton(btnAttack, 'Space');
     bindHoldButton(btnDance, 'KeyF');
+
+    function setJoystickKnob(dx, dy) {
+      if (!joystickKnob) return;
+      joystickKnob.style.transform = `translate(${Math.round(dx)}px, ${Math.round(dy)}px)`;
+    }
+
+    function resetJoystick() {
+      virtualMove.active = false;
+      virtualMove.dx = 0;
+      virtualMove.dy = 0;
+      setJoystickKnob(0, 0);
+    }
+
+    function updateJoystickFromPointer(clientX, clientY) {
+      if (!joystick) return;
+      const rect = joystick.getBoundingClientRect();
+      const radius = rect.width / 2;
+      const knobRadius = joystickKnob ? joystickKnob.getBoundingClientRect().width / 2 : radius * 0.42;
+      const maxDistance = Math.max(12, radius - knobRadius - 8);
+      const centerX = rect.left + radius;
+      const centerY = rect.top + radius;
+
+      let dx = clientX - centerX;
+      let dy = clientY - centerY;
+      const distance = Math.hypot(dx, dy);
+      if (distance > maxDistance) {
+        dx = (dx / distance) * maxDistance;
+        dy = (dy / distance) * maxDistance;
+      }
+
+      virtualMove.active = true;
+      virtualMove.dx = dx / maxDistance;
+      virtualMove.dy = dy / maxDistance;
+      setJoystickKnob(dx, dy);
+    }
+
+    if (joystick) {
+      let activePointerId = null;
+
+      const onPointerDown = (e) => {
+        if (e.button != null && e.button !== 0) return;
+        e.preventDefault();
+        activePointerId = e.pointerId;
+        joystick.setPointerCapture?.(e.pointerId);
+        updateJoystickFromPointer(e.clientX, e.clientY);
+      };
+
+      const onPointerMove = (e) => {
+        if (activePointerId !== e.pointerId) return;
+        e.preventDefault();
+        updateJoystickFromPointer(e.clientX, e.clientY);
+      };
+
+      const onPointerUp = (e) => {
+        if (activePointerId !== e.pointerId) return;
+        e.preventDefault();
+        activePointerId = null;
+        resetJoystick();
+      };
+
+      joystick.addEventListener('pointerdown', onPointerDown);
+      window.addEventListener('pointermove', onPointerMove);
+      window.addEventListener('pointerup', onPointerUp);
+      window.addEventListener('pointercancel', onPointerUp);
+    }
 
     if (btnRestart) {
       const restart = (e) => {
@@ -1206,15 +1324,16 @@
       keys['ArrowUp'] = false;
       keys['Space'] = false;
       keys['KeyF'] = false;
+      resetJoystick();
     });
 
     // Update game state
     function update(deltaMs) {
       const step = deltaMs / FRAME_MS;
       // Check input states
-      const left = keys['ArrowLeft'] || keys['KeyA'];
-      const right = keys['ArrowRight'] || keys['KeyD'];
-      const up = keys['ArrowUp'] || keys['KeyW'] || keys['Space'];
+      const left = keys['ArrowLeft'] || keys['KeyA'] || (virtualMove.active && virtualMove.dx < -0.25);
+      const right = keys['ArrowRight'] || keys['KeyD'] || (virtualMove.active && virtualMove.dx > 0.25);
+      const up = keys['ArrowUp'] || keys['KeyW'] || keys['Space'] || (virtualMove.active && virtualMove.dy < -0.55);
       const attack = keys['Space'];
       const walk = keys['ShiftLeft'] || keys['ShiftRight'];
       const action = keys['KeyF'];
