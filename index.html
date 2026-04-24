@@ -393,6 +393,7 @@
     const EASTER_DISTANCE_M = 500;
     const EASTER_RELIC_X = -EASTER_DISTANCE_M * METER_TO_WORLD;
     const EASTER_BOSS_X = EASTER_DISTANCE_M * METER_TO_WORLD;
+    const PLATFORM_HEIGHT = 16;
     
     // Animation configs
     const ANIMATIONS = {
@@ -461,6 +462,18 @@
       bossSpawned: false,
       bossKilled: false
     };
+
+    const relicPlatforms = [
+      { x: EASTER_RELIC_X + 260, y: GROUND_Y - 78, width: 120, type: 'start' },
+      { x: EASTER_RELIC_X + 108, y: GROUND_Y - 136, width: 80, type: 'step' },
+      { x: EASTER_RELIC_X - 34, y: GROUND_Y - 192, width: 72, type: 'step' },
+      { x: EASTER_RELIC_X - 192, y: GROUND_Y - 148, width: 84, type: 'step' },
+      { x: EASTER_RELIC_X - 338, y: GROUND_Y - 230, width: 68, type: 'step' },
+      { x: EASTER_RELIC_X - 492, y: GROUND_Y - 286, width: 72, type: 'step' },
+      { x: EASTER_RELIC_X - 652, y: GROUND_Y - 242, width: 94, type: 'step' },
+      { x: EASTER_RELIC_X - 816, y: GROUND_Y - 332, width: 128, type: 'goal' }
+    ];
+    const relicGoalPlatform = relicPlatforms[relicPlatforms.length - 1];
 
     function worldToScreenX(x) {
       return x - camera.x;
@@ -659,13 +672,14 @@
       }
     };
 
-    function spawnPowerup(x, y, forcedType = null, persistent = false) {
+    function spawnPowerup(x, y, forcedType = null, persistent = false, landingY = GROUND_Y - 32) {
       const roll = Math.random();
       const type = forcedType || (roll < 0.45 ? 'power' : roll < 0.72 ? 'heal' : 'speed');
       powerups.push({
         type,
         x,
         y: y - 40,
+        landingY,
         vy: -2.6,
         life: persistent ? Infinity : 720,
         persistent,
@@ -705,11 +719,11 @@
         p.life -= step;
         p.bob += 0.08 * step;
 
-        if (p.y < GROUND_Y - 32) {
+        if (p.y < p.landingY) {
           p.vy += 0.16 * step;
           p.y += p.vy * step;
         } else {
-          p.y = GROUND_Y - 32;
+          p.y = p.landingY;
           p.vy = 0;
         }
 
@@ -776,6 +790,42 @@
           ctx.fillRect(8, 8, 10, 3);
           ctx.fillRect(11, 11, 7, 3);
           ctx.fillRect(8, 14, 6, 3);
+        }
+
+        ctx.restore();
+      });
+    }
+
+    function drawRelicPlatforms() {
+      const leftBound = camera.x - 120;
+      const rightBound = camera.x + CANVAS_WIDTH + 120;
+
+      relicPlatforms.forEach(platform => {
+        if (platform.x + platform.width < leftBound || platform.x > rightBound) return;
+
+        const screenX = Math.round(worldToScreenX(platform.x));
+        const screenY = Math.round(platform.y);
+
+        ctx.save();
+        ctx.fillStyle = platform.type === 'goal' ? '#7c3aed' : '#92400e';
+        ctx.fillRect(screenX, screenY, platform.width, PLATFORM_HEIGHT);
+
+        ctx.fillStyle = platform.type === 'goal' ? '#c4b5fd' : '#f59e0b';
+        for (let x = 4; x < platform.width - 4; x += 18) {
+          ctx.fillRect(screenX + x, screenY + 4, 12, 4);
+        }
+
+        ctx.fillStyle = platform.type === 'goal' ? '#5b21b6' : '#78350f';
+        for (let x = 0; x < platform.width; x += 22) {
+          ctx.fillRect(screenX + x, screenY + 10, 2, PLATFORM_HEIGHT - 10);
+        }
+
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.25)';
+        ctx.fillRect(screenX + 6, screenY + PLATFORM_HEIGHT, platform.width - 12, 5);
+
+        if (platform.type === 'goal') {
+          ctx.fillStyle = '#fef08a';
+          ctx.fillRect(screenX + platform.width / 2 - 12, screenY - 10, 24, 4);
         }
 
         ctx.restore();
@@ -915,7 +965,13 @@
     function ensureEasterContent() {
       if (!easterState.relicSpawned) {
         easterState.relicSpawned = true;
-        spawnPowerup(EASTER_RELIC_X, GROUND_Y, 'relic', true);
+        spawnPowerup(
+          relicGoalPlatform.x + relicGoalPlatform.width / 2,
+          relicGoalPlatform.y - 8,
+          'relic',
+          true,
+          relicGoalPlatform.y - 42
+        );
       }
 
       if (state.x >= EASTER_BOSS_X - CANVAS_WIDTH * 0.75) {
@@ -1629,14 +1685,42 @@
 
       // Update position
       const oldX = state.x;
+      const oldY = state.y;
       state.x += state.vx * step;
       state.y += state.vy * step;
 
-      // Ground collision
-      if (state.y >= GROUND_Y) {
+      // Ground / platform collision
+      let landed = false;
+      if (state.vy >= 0) {
+        for (let i = 0; i < relicPlatforms.length; i++) {
+          const platform = relicPlatforms[i];
+          const platformTop = platform.y;
+          const platformLeft = platform.x - SPRITE_DRAW_WIDTH * 0.22;
+          const platformRight = platform.x + platform.width + SPRITE_DRAW_WIDTH * 0.22;
+          if (
+            state.x >= platformLeft &&
+            state.x <= platformRight &&
+            oldY <= platformTop &&
+            state.y >= platformTop
+          ) {
+            state.y = platformTop;
+            state.vy = 0;
+            state.isGrounded = true;
+            landed = true;
+            break;
+          }
+        }
+      }
+
+      if (!landed && state.y >= GROUND_Y) {
         state.y = GROUND_Y;
         state.vy = 0;
         state.isGrounded = true;
+        landed = true;
+      }
+
+      if (!landed) {
+        state.isGrounded = false;
       }
 
       const actualMove = state.x - oldX;
@@ -1842,6 +1926,8 @@
       ctx.moveTo(0, GROUND_Y + FRAME_HEIGHT / 2);
       ctx.lineTo(CANVAS_WIDTH, GROUND_Y + FRAME_HEIGHT / 2);
       ctx.stroke();
+
+      drawRelicPlatforms();
 
       // Draw monsters (behind player)
       drawMonsters();
