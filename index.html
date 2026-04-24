@@ -394,6 +394,7 @@
     const EASTER_RELIC_X = -EASTER_DISTANCE_M * METER_TO_WORLD;
     const EASTER_BOSS_X = EASTER_DISTANCE_M * METER_TO_WORLD;
     const PLATFORM_HEIGHT = 16;
+    const PLAYER_PLATFORM_OFFSET = 18;
     
     // Animation configs
     const ANIMATIONS = {
@@ -1695,15 +1696,16 @@
         for (let i = 0; i < relicPlatforms.length; i++) {
           const platform = relicPlatforms[i];
           const platformTop = platform.y;
+          const platformSupportY = platformTop + PLAYER_PLATFORM_OFFSET;
           const platformLeft = platform.x - SPRITE_DRAW_WIDTH * 0.22;
           const platformRight = platform.x + platform.width + SPRITE_DRAW_WIDTH * 0.22;
           if (
             state.x >= platformLeft &&
             state.x <= platformRight &&
-            oldY <= platformTop &&
-            state.y >= platformTop
+            oldY <= platformSupportY &&
+            state.y >= platformSupportY
           ) {
-            state.y = platformTop;
+            state.y = platformSupportY;
             state.vy = 0;
             state.isGrounded = true;
             landed = true;
