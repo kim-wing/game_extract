@@ -1243,6 +1243,8 @@
       const type = level === 5 ? 'stageBossBrute' : 'stageBossMage';
       const palette = MONSTER_TYPES[type];
       const hp = config.monsterHp + palette.hpBonus + 8;
+      const speed = config.monsterSpeed * palette.speedMul;
+      const damage = Math.max(2, Math.round(config.monsterDamage * palette.damageMul));
 
       monsters.push({
         type,
@@ -1250,13 +1252,13 @@
         x: camera.x + CANVAS_WIDTH + 120,
         y: GROUND_Y - MONSTER_FOOT_OFFSET,
         vx: -palette.speedMul,
-        speed: config.monsterSpeed * palette.speedMul,
+        speed,
         facing: -1,
         hp,
         maxHp: hp,
         attackStyle: palette.attackStyle,
         attackRange: palette.attackRange,
-        damage: Math.max(2, Math.round(config.monsterDamage * palette.damageMul)),
+        damage,
         expReward: palette.expReward,
         isStageBoss: true,
         isDead: false,
@@ -1270,10 +1272,38 @@
         animTimer: 0,
         animFrame: 0,
         state: 'walk',
-        drawScale: 2.2
+        drawScale: 2.2,
+        phase: 1,
+        phaseTriggered: false,
+        baseSpeed: speed,
+        baseDamage: damage,
+        baseProjectileSpeed: palette.projectileSpeed || 0
       });
 
       showAlert(level === 5 ? '第 5 关首领 岩角王登场' : '第 10 关首领 夜魇术师登场', palette.accent, 150);
+    }
+
+    function triggerStageBossPhaseTwo(monster) {
+      if (!monster.isStageBoss || monster.phaseTriggered || monster.hp > monster.maxHp * 0.5) return;
+
+      monster.phase = 2;
+      monster.phaseTriggered = true;
+      monster.attackCooldown = 10;
+      createCollisionParticles(monster.x, monster.y - MONSTER_HEIGHT, monster.palette.accent);
+      createCollisionParticles(monster.x, monster.y - MONSTER_HEIGHT * 0.55, '#fde68a');
+
+      if (monster.type === 'stageBossBrute') {
+        monster.speed = monster.baseSpeed * 1.28;
+        monster.damage = monster.baseDamage + 2;
+        monster.drawScale = 2.32;
+        showAlert('岩角王狂暴化', '#fb923c', 130);
+      } else if (monster.type === 'stageBossMage') {
+        monster.speed = monster.baseSpeed * 1.12;
+        monster.damage = monster.baseDamage + 1;
+        monster.attackRange += 56;
+        monster.drawScale = 2.28;
+        showAlert('夜魇术师进入二阶段', '#c084fc', 130);
+      }
     }
 
     function spawnMonster() {
@@ -1431,8 +1461,11 @@
     }
 
     function spawnBossVolley(monster) {
-      const baseSpeed = monster.palette.projectileSpeed || 5.4;
-      [-0.22, 0, 0.22].forEach((spread) => {
+      const baseSpeed = (monster.baseProjectileSpeed || monster.palette.projectileSpeed || 5.4) + (monster.phase === 2 ? 0.75 : 0);
+      const spreads = monster.phase === 2
+        ? [-0.38, -0.18, 0, 0.18, 0.38]
+        : [-0.22, 0, 0.22];
+      spreads.forEach((spread) => {
         const projectileX = monster.x + monster.facing * 24;
         const projectileY = monster.y - 36;
         const dx = state.x - projectileX;
@@ -1525,6 +1558,10 @@
           continue;
         }
 
+        if (m.isStageBoss) {
+          triggerStageBossPhaseTwo(m);
+        }
+
         const playerDx = state.x - m.x;
         const playerDy = state.y - m.y;
         const absPlayerDx = Math.abs(playerDx);
@@ -1559,14 +1596,14 @@
         if (m.isAttacking) {
           m.attackTimer += step;
           const attackHitFrame = m.attackStyle === 'slam'
-            ? MONSTER_ATTACK_HIT_FRAME + 5
+            ? MONSTER_ATTACK_HIT_FRAME + (m.phase === 2 ? 1 : 5)
             : m.attackStyle === 'ranged'
-              ? MONSTER_ATTACK_HIT_FRAME - 4
+              ? MONSTER_ATTACK_HIT_FRAME - (m.phase === 2 ? 7 : 4)
               : MONSTER_ATTACK_HIT_FRAME;
           const attackDuration = m.attackStyle === 'slam'
-            ? MONSTER_ATTACK_DURATION + 10
+            ? MONSTER_ATTACK_DURATION + (m.phase === 2 ? 2 : 10)
             : m.attackStyle === 'ranged'
-              ? MONSTER_ATTACK_DURATION - 6
+              ? MONSTER_ATTACK_DURATION - (m.phase === 2 ? 10 : 6)
               : MONSTER_ATTACK_DURATION;
 
           if (!m.hasAttackHit && m.attackTimer >= attackHitFrame) {
@@ -1579,11 +1616,18 @@
             } else {
               const hitDx = Math.abs(state.x - (m.x + m.facing * 18));
               const hitDy = Math.abs(state.y - m.y);
-              if (hitDx <= (m.attackRange || MONSTER_ATTACK_RANGE) && hitDy < 76) {
+              const slamRange = m.isStageBoss && m.type === 'stageBossBrute' && m.phase === 2
+                ? (m.attackRange || MONSTER_ATTACK_RANGE) + 24
+                : (m.attackRange || MONSTER_ATTACK_RANGE);
+              const slamHeight = m.isStageBoss && m.type === 'stageBossBrute' && m.phase === 2 ? 88 : 76;
+              if (hitDx <= slamRange && hitDy < slamHeight) {
                 hitPlayer(m.x, m.isBoss ? state.maxHp / 2 : m.damage);
                 if (m.isStageBoss && m.type === 'stageBossBrute') {
-                  state.x += m.facing * 46;
+                  state.x += m.facing * (m.phase === 2 ? 68 : 46);
                   createCollisionParticles(state.x, state.y, '#fb923c');
+                  if (m.phase === 2) {
+                    createCollisionParticles(state.x + m.facing * 16, state.y - 18, '#fde68a');
+                  }
                 }
               }
             }
@@ -1593,7 +1637,13 @@
           if (m.attackTimer >= attackDuration) {
             m.isAttacking = false;
             m.state = 'walk';
-            m.attackCooldown = MONSTER_ATTACK_COOLDOWN;
+            if (m.isStageBoss && m.phase === 2) {
+              m.attackCooldown = m.attackStyle === 'ranged' ? 24 : 34;
+            } else if (m.isStageBoss) {
+              m.attackCooldown = m.attackStyle === 'ranged' ? 42 : 48;
+            } else {
+              m.attackCooldown = MONSTER_ATTACK_COOLDOWN;
+            }
           }
         }
 
@@ -1692,6 +1742,12 @@
       ctx.translate(Math.round(screenX + m.facing * lunge), Math.round(m.y + bob));
       ctx.scale(m.facing * drawScale * stretch, drawScale * squash);
       ctx.translate(-24, -58);
+
+      if (m.isStageBoss && m.phase === 2) {
+        ctx.globalAlpha = 0.24;
+        pixelRect(3, 8, 42, 46, m.type === 'stageBossBrute' ? '#fde68a' : '#ddd6fe');
+        ctx.globalAlpha = 1;
+      }
 
       ctx.fillStyle = 'rgba(15, 23, 42, 0.35)';
       ctx.fillRect(8, 55, 34, 5);
@@ -1816,9 +1872,16 @@
         ctx.fillStyle = m.isBoss && !easterState.relicCollected
           ? '#a855f7'
           : m.isStageBoss
-            ? '#f97316'
+            ? (m.phase === 2 ? '#fde047' : '#f97316')
             : (hpPercent > 0.5 ? '#22c55e' : '#ef4444');
         ctx.fillRect(screenX - barWidth / 2, barY, barWidth * hpPercent, 5);
+
+        if (m.isStageBoss) {
+          ctx.fillStyle = m.phase === 2 ? '#fef08a' : '#fed7aa';
+          ctx.font = '700 10px ui-monospace, SFMono-Regular, Menlo, monospace';
+          ctx.textAlign = 'center';
+          ctx.fillText(`${m.palette.name} ${m.phase === 2 ? '二阶段' : '一阶段'}`, screenX, barY - 12);
+        }
       });
     }
 
