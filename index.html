@@ -2264,21 +2264,51 @@
         const maxAlertWidth = Math.min(360, CANVAS_WIDTH - 40);
         let alertFontSize = 12;
         ctx.font = `700 ${alertFontSize}px ui-monospace, SFMono-Regular, Menlo, monospace`;
-        let textWidth = ctx.measureText(state.alertText).width;
-        if (textWidth > maxAlertWidth - alertPadding * 2) {
-          alertFontSize = Math.max(9, Math.floor(alertFontSize * (maxAlertWidth - alertPadding * 2) / textWidth));
-          ctx.font = `700 ${alertFontSize}px ui-monospace, SFMono-Regular, Menlo, monospace`;
-          textWidth = ctx.measureText(state.alertText).width;
+        const maxTextWidth = maxAlertWidth - alertPadding * 2;
+        const lines = [];
+        let currentLine = '';
+        for (const ch of state.alertText) {
+          const candidate = currentLine + ch;
+          if (ctx.measureText(candidate).width > maxTextWidth && currentLine) {
+            lines.push(currentLine);
+            currentLine = ch;
+          } else {
+            currentLine = candidate;
+          }
         }
+        if (currentLine) lines.push(currentLine);
+
+        if (lines.length > 2) {
+          alertFontSize = 10;
+          ctx.font = `700 ${alertFontSize}px ui-monospace, SFMono-Regular, Menlo, monospace`;
+          lines.length = 0;
+          currentLine = '';
+          for (const ch of state.alertText) {
+            const candidate = currentLine + ch;
+            if (ctx.measureText(candidate).width > maxTextWidth && currentLine) {
+              lines.push(currentLine);
+              currentLine = ch;
+            } else {
+              currentLine = candidate;
+            }
+          }
+          if (currentLine) lines.push(currentLine);
+        }
+
+        const visibleLines = lines.slice(0, 2);
+        const textWidth = Math.max(...visibleLines.map(line => ctx.measureText(line).width), 0);
         const alertWidth = Math.min(maxAlertWidth, Math.max(190, textWidth + alertPadding * 2));
-        const alertHeight = 26;
+        const lineHeight = alertFontSize + 2;
+        const alertHeight = 16 + visibleLines.length * lineHeight;
         const alertX = CANVAS_WIDTH / 2 - alertWidth / 2;
         ctx.fillStyle = 'rgba(15, 23, 42, 0.78)';
         ctx.fillRect(alertX, 30, alertWidth, alertHeight);
         ctx.strokeStyle = state.alertColor;
         ctx.strokeRect(alertX, 30, alertWidth, alertHeight);
         ctx.fillStyle = state.alertColor;
-        ctx.fillText(state.alertText, CANVAS_WIDTH / 2, 37 + (12 - alertFontSize) * 0.35);
+        visibleLines.forEach((line, index) => {
+          ctx.fillText(line, CANVAS_WIDTH / 2, 36 + index * lineHeight);
+        });
         ctx.restore();
       }
 
