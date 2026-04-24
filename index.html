@@ -450,6 +450,12 @@
       danceInvulnTimer: 0,
       hp: 5,
       maxHp: 5,
+      level: 1,
+      exp: 0,
+      nextExp: 6,
+      baseAttack: 1,
+      levelAttackBonus: 0,
+      tempAttackBonus: 0,
       attackPower: 1,
       attackBoostTimer: 0,
       speedBoostTimer: 0,
@@ -496,13 +502,42 @@
       bannerText: '第 1 关'
     };
 
+    function syncAttackPower() {
+      if (easterState.relicCollected) {
+        state.attackPower = 999;
+        return;
+      }
+      state.attackPower = state.baseAttack + state.levelAttackBonus + state.tempAttackBonus;
+    }
+
+    function grantExp(amount) {
+      if (levelState.phase === 'gameover' || levelState.phase === 'won') return;
+      state.exp += amount;
+
+      while (state.exp >= state.nextExp) {
+        state.exp -= state.nextExp;
+        state.level++;
+        state.nextExp = Math.round(state.nextExp * 1.4) + 2;
+        state.maxHp += 1;
+        state.hp = Math.min(state.maxHp, state.hp + 2);
+        if (state.level % 2 === 0) {
+          state.levelAttackBonus += 1;
+        }
+        syncAttackPower();
+        state.pickupText = `升级 Lv.${state.level}`;
+        state.pickupTextTimer = 110;
+        createCollisionParticles(state.x, state.y - SPRITE_DRAW_HEIGHT * 0.55, '#93c5fd');
+      }
+    }
+
     function getLevelConfig(level) {
       return {
         targetKills: 3 + level,
         maxMonsters: Math.min(2 + Math.floor(level / 2), 5),
         spawnInterval: Math.max(48, MONSTER_SPAWN_INTERVAL - (level - 1) * 12),
-        monsterHp: MONSTER_HP + Math.floor((level - 1) / 2),
-        monsterSpeed: MONSTER_SPEED + Math.min(0.7, (level - 1) * 0.08)
+        monsterHp: MONSTER_HP + Math.floor((level - 1) / 2) + Math.floor((state.level - 1) / 3),
+        monsterSpeed: MONSTER_SPEED + Math.min(0.9, (level - 1) * 0.08) + Math.min(0.35, (state.level - 1) * 0.02),
+        monsterDamage: 1 + Math.floor((level - 1) / 4) + Math.floor((state.level - 1) / 5)
       };
     }
 
@@ -563,13 +598,21 @@
 
     function restartGame() {
       monsters.length = 0;
+      enemyProjectiles.length = 0;
       powerups.length = 0;
       particles.length = 0;
       state.x = PLAYER_START_X;
       state.y = GROUND_Y;
       state.vx = 0;
       state.vy = 0;
+      state.level = 1;
+      state.exp = 0;
+      state.nextExp = 6;
+      state.maxHp = 5;
       state.hp = state.maxHp;
+      state.baseAttack = 1;
+      state.levelAttackBonus = 0;
+      state.tempAttackBonus = 0;
       state.attackPower = 1;
       state.attackBoostTimer = 0;
       state.speedBoostTimer = 0;
@@ -592,6 +635,7 @@
       state.frameIndex = 0;
       state.frameTimer = 0;
       levelState.totalKills = 0;
+      syncAttackPower();
       startLevel(1);
     }
 
@@ -695,16 +739,18 @@
 
       if (powerup.type === 'relic') {
         easterState.relicCollected = true;
-        state.attackPower = 999;
+        state.tempAttackBonus = 0;
         state.attackBoostTimer = Infinity;
+        syncAttackPower();
       } else if (powerup.type === 'power') {
         if (easterState.relicCollected) {
           state.pickupText = '无敌攻击力已生效';
           createCollisionParticles(powerup.x, powerup.y, config.color);
           return;
         }
-        state.attackPower = 2;
+        state.tempAttackBonus = 1;
         state.attackBoostTimer = config.duration;
+        syncAttackPower();
       } else if (powerup.type === 'heal') {
         state.hp = Math.min(state.maxHp, state.hp + 2);
       } else if (powerup.type === 'speed') {
@@ -847,11 +893,16 @@
     const MONSTER_ATTACK_DURATION = 46;
     const MONSTER_ATTACK_HIT_FRAME = 22;
     const MONSTER_ATTACK_COOLDOWN = 58;
+    const enemyProjectiles = [];
     const MONSTER_TYPES = {
       sprout: {
-        name: 'SPROUT',
+        name: '豆苗',
         hpBonus: 0,
         speedMul: 1,
+        expReward: 2,
+        attackStyle: 'melee',
+        attackRange: MONSTER_ATTACK_RANGE,
+        damageMul: 1,
         color: '#86efac',
         mid: '#bbf7d0',
         dark: '#15803d',
@@ -859,9 +910,13 @@
         cheek: '#fda4af'
       },
       berry: {
-        name: 'BERRY',
+        name: '方莓',
         hpBonus: 2,
         speedMul: 0.78,
+        expReward: 3,
+        attackStyle: 'charge',
+        attackRange: MONSTER_ATTACK_RANGE + 14,
+        damageMul: 1.4,
         color: '#f9a8d4',
         mid: '#fbcfe8',
         dark: '#be185d',
@@ -869,17 +924,66 @@
         cheek: '#fde68a'
       },
       dewdrop: {
-        name: 'DEW',
+        name: '露露',
         hpBonus: -1,
         speedMul: 1.35,
+        expReward: 2,
+        attackStyle: 'melee',
+        attackRange: MONSTER_ATTACK_RANGE - 6,
+        damageMul: 0.85,
         color: '#7dd3fc',
         mid: '#bae6fd',
         dark: '#0284c7',
         accent: '#38bdf8',
         cheek: '#f0abfc'
       },
+      blocky: {
+        name: '砖脸',
+        hpBonus: 1,
+        speedMul: 0.95,
+        expReward: 3,
+        attackStyle: 'slam',
+        attackRange: MONSTER_ATTACK_RANGE + 8,
+        damageMul: 1.2,
+        shape: 'square',
+        color: '#fca5a5',
+        mid: '#fecaca',
+        dark: '#b91c1c',
+        accent: '#fb7185',
+        cheek: '#fdba74'
+      },
+      puff: {
+        name: '圆啾',
+        hpBonus: 0,
+        speedMul: 1.12,
+        expReward: 2,
+        attackStyle: 'melee',
+        attackRange: MONSTER_ATTACK_RANGE - 2,
+        damageMul: 1,
+        shape: 'round',
+        color: '#fde68a',
+        mid: '#fef3c7',
+        dark: '#ca8a04',
+        accent: '#f59e0b',
+        cheek: '#f9a8d4'
+      },
+      mage: {
+        name: '法泡',
+        hpBonus: 0,
+        speedMul: 0.86,
+        expReward: 4,
+        attackStyle: 'ranged',
+        attackRange: 250,
+        damageMul: 1,
+        projectileSpeed: 4.2,
+        color: '#c4b5fd',
+        mid: '#ddd6fe',
+        dark: '#6d28d9',
+        accent: '#8b5cf6',
+        cheek: '#bfdbfe'
+      },
       boss: {
-        name: 'BOSS',
+        name: '大王',
         hpBonus: 0,
         speedMul: 0,
         color: '#c084fc',
@@ -892,8 +996,11 @@
 
     function chooseMonsterType(level) {
       const roll = Math.random();
-      if (level >= 3 && roll < 0.28) return 'berry';
-      if (level >= 2 && roll < 0.52) return 'dewdrop';
+      if (level >= 5 && roll < 0.18) return 'blocky';
+      if (level >= 4 && roll < 0.34) return 'puff';
+      if (level >= 3 && roll < 0.5) return 'mage';
+      if (level >= 3 && roll < 0.68) return 'berry';
+      if (level >= 2 && roll < 0.86) return 'dewdrop';
       return 'sprout';
     }
 
@@ -916,6 +1023,10 @@
         facing: side === 'left' ? 1 : -1,
         hp,
         maxHp: hp,
+        attackStyle: typeConfig.attackStyle || 'melee',
+        attackRange: typeConfig.attackRange || MONSTER_ATTACK_RANGE,
+        damage: Math.max(1, Math.round(config.monsterDamage * (typeConfig.damageMul || 1))),
+        expReward: typeConfig.expReward || 2,
         isDead: false,
         isAttacking: false,
         flashTimer: 0,
@@ -947,6 +1058,10 @@
         facing: -1,
         hp: 999,
         maxHp: 999,
+        attackStyle: 'boss',
+        attackRange: MONSTER_ATTACK_RANGE + 18,
+        damage: Math.max(1, state.maxHp / 2),
+        expReward: 0,
         isBoss: true,
         isDead: false,
         isAttacking: false,
@@ -987,6 +1102,7 @@
         completeEasterEnding();
         return;
       }
+      grantExp(monster.expReward || 1);
       levelState.kills++;
       levelState.totalKills++;
       levelState.bannerTimer = Math.max(levelState.bannerTimer, 24);
@@ -1009,6 +1125,55 @@
         levelState.phase = 'gameover';
         levelState.bannerTimer = 999999;
         levelState.bannerText = '游戏结束';
+      }
+    }
+
+    function spawnEnemyProjectile(monster) {
+      const projectileX = monster.x + monster.facing * 22;
+      const projectileY = monster.y - 34;
+      const dx = state.x - projectileX;
+      const dy = (state.y - SPRITE_DRAW_HEIGHT * 0.55) - projectileY;
+      const distance = Math.hypot(dx, dy) || 1;
+      const speed = monster.palette.projectileSpeed || 4;
+
+      enemyProjectiles.push({
+        x: projectileX,
+        y: projectileY,
+        vx: (dx / distance) * speed,
+        vy: (dy / distance) * speed,
+        life: 120,
+        radius: 10,
+        color: monster.palette.accent,
+        glow: monster.palette.mid,
+        damage: monster.damage
+      });
+    }
+
+    function updateEnemyProjectiles(step) {
+      for (let i = enemyProjectiles.length - 1; i >= 0; i--) {
+        const projectile = enemyProjectiles[i];
+        projectile.x += projectile.vx * step;
+        projectile.y += projectile.vy * step;
+        projectile.life -= step;
+
+        const dx = projectile.x - state.x;
+        const dy = projectile.y - (state.y - SPRITE_DRAW_HEIGHT * 0.55);
+        if (dx * dx + dy * dy < 30 * 30) {
+          hitPlayer(projectile.x, projectile.damage);
+          createCollisionParticles(projectile.x, projectile.y, projectile.color);
+          enemyProjectiles.splice(i, 1);
+          continue;
+        }
+
+        if (
+          projectile.life <= 0 ||
+          projectile.x < camera.x - 60 ||
+          projectile.x > camera.x + CANVAS_WIDTH + 60 ||
+          projectile.y < -40 ||
+          projectile.y > CANVAS_HEIGHT + 40
+        ) {
+          enemyProjectiles.splice(i, 1);
+        }
       }
     }
 
@@ -1062,7 +1227,16 @@
           m.attackCooldown -= step;
         }
 
-        if (m.stunTimer <= 0 && !m.isAttacking && m.attackCooldown <= 0 && absPlayerDx <= MONSTER_ATTACK_RANGE && Math.abs(playerDy) < 70) {
+        const canAttackPlayer = absPlayerDx <= (m.attackRange || MONSTER_ATTACK_RANGE) && Math.abs(playerDy) < 110;
+        if (m.attackStyle === 'ranged') {
+          if (m.stunTimer <= 0 && !m.isAttacking && m.attackCooldown <= 0 && canAttackPlayer) {
+            m.isAttacking = true;
+            m.state = 'cast';
+            m.attackTimer = 0;
+            m.hasAttackHit = false;
+            m.vx = 0;
+          }
+        } else if (m.stunTimer <= 0 && !m.isAttacking && m.attackCooldown <= 0 && canAttackPlayer) {
           m.isAttacking = true;
           m.state = 'attack';
           m.attackTimer = 0;
@@ -1072,24 +1246,44 @@
 
         if (m.isAttacking) {
           m.attackTimer += step;
+          const attackHitFrame = m.attackStyle === 'slam'
+            ? MONSTER_ATTACK_HIT_FRAME + 5
+            : m.attackStyle === 'ranged'
+              ? MONSTER_ATTACK_HIT_FRAME - 4
+              : MONSTER_ATTACK_HIT_FRAME;
+          const attackDuration = m.attackStyle === 'slam'
+            ? MONSTER_ATTACK_DURATION + 10
+            : m.attackStyle === 'ranged'
+              ? MONSTER_ATTACK_DURATION - 6
+              : MONSTER_ATTACK_DURATION;
 
-          if (!m.hasAttackHit && m.attackTimer >= MONSTER_ATTACK_HIT_FRAME) {
-            const hitDx = Math.abs(state.x - (m.x + m.facing * 18));
-            const hitDy = Math.abs(state.y - m.y);
-            if (hitDx <= MONSTER_ATTACK_RANGE && hitDy < 76) {
-              hitPlayer(m.x, m.isBoss ? state.maxHp / 2 : 1);
+          if (!m.hasAttackHit && m.attackTimer >= attackHitFrame) {
+            if (m.attackStyle === 'ranged') {
+              spawnEnemyProjectile(m);
+            } else {
+              const hitDx = Math.abs(state.x - (m.x + m.facing * 18));
+              const hitDy = Math.abs(state.y - m.y);
+              if (hitDx <= (m.attackRange || MONSTER_ATTACK_RANGE) && hitDy < 76) {
+                hitPlayer(m.x, m.isBoss ? state.maxHp / 2 : m.damage);
+              }
             }
             m.hasAttackHit = true;
           }
 
-          if (m.attackTimer >= MONSTER_ATTACK_DURATION) {
+          if (m.attackTimer >= attackDuration) {
             m.isAttacking = false;
             m.state = 'walk';
             m.attackCooldown = MONSTER_ATTACK_COOLDOWN;
           }
         }
 
-        const intendedVx = m.isBoss || m.stunTimer > 0 || m.isAttacking ? 0 : m.facing * m.speed;
+        const keepDistance = m.attackStyle === 'ranged' && absPlayerDx < 170;
+        const chargeBoost = m.attackStyle === 'charge' && absPlayerDx > 90 ? 1.35 : 1;
+        const intendedVx = m.isBoss || m.stunTimer > 0 || m.isAttacking
+          ? 0
+          : keepDistance
+            ? -m.facing * m.speed * 0.75
+            : m.facing * m.speed * chargeBoost;
         const nextX = m.x + intendedVx * step;
         const dx = nextX - state.x;
         const dy = m.y - state.y;
@@ -1188,6 +1382,10 @@
         pixelRect(31, 2, 8, 10, '#facc15');
         pixelRect(16, 0, 16, 7, bodyDark);
         pixelRect(20, -3, 8, 5, '#fde047');
+      } else if (m.type === 'mage') {
+        pixelRect(14, 1, 22, 6, bodyDark);
+        pixelRect(10, 7, 30, 5, palette.accent);
+        pixelRect(18, -3, 14, 6, bodyDark);
       } else if (m.type === 'berry') {
         pixelRect(14, 4, 22, 8, bodyDark);
         pixelRect(17, 1, 5, 6, '#16a34a');
@@ -1201,19 +1399,36 @@
         pixelRect(24, 4, 9, 5, '#4ade80');
       }
 
-      // Soft blob outline and body
-      pixelRect(14, 10, 20, 4, bodyDark);
-      pixelRect(9, 14, 30, 5, bodyDark);
-      pixelRect(6, 19, 36, 10, bodyDark);
-      pixelRect(5, 29, 38, 15, bodyDark);
-      pixelRect(8, 44, 32, 9, bodyDark);
+      if (m.type === 'blocky') {
+        pixelRect(9, 13, 30, 6, bodyDark);
+        pixelRect(7, 19, 34, 24, bodyDark);
+        pixelRect(11, 17, 26, 22, body);
+        pixelRect(13, 19, 22, 8, bodyMid);
+        pixelRect(12, 41, 10, 8, bodyDark);
+        pixelRect(26, 41, 10, 8, bodyDark);
+      } else if (m.type === 'puff') {
+        pixelRect(16, 10, 16, 4, bodyDark);
+        pixelRect(10, 14, 28, 5, bodyDark);
+        pixelRect(6, 19, 36, 10, bodyDark);
+        pixelRect(8, 29, 32, 13, bodyDark);
+        pixelRect(12, 14, 24, 4, bodyMid);
+        pixelRect(8, 18, 32, 18, body);
+        pixelRect(12, 36, 24, 6, bodyMid);
+      } else {
+        // Soft blob outline and body
+        pixelRect(14, 10, 20, 4, bodyDark);
+        pixelRect(9, 14, 30, 5, bodyDark);
+        pixelRect(6, 19, 36, 10, bodyDark);
+        pixelRect(5, 29, 38, 15, bodyDark);
+        pixelRect(8, 44, 32, 9, bodyDark);
 
-      pixelRect(14, 13, 20, 4, bodyMid);
-      pixelRect(10, 17, 28, 7, body);
-      pixelRect(8, 24, 32, 16, body);
-      pixelRect(10, 39, 28, 8, bodyMid);
-      pixelRect(15, 47, 18, 5, body);
-      pixelRect(16, 18, 10, 4, '#dcfce7');
+        pixelRect(14, 13, 20, 4, bodyMid);
+        pixelRect(10, 17, 28, 7, body);
+        pixelRect(8, 24, 32, 16, body);
+        pixelRect(10, 39, 28, 8, bodyMid);
+        pixelRect(15, 47, 18, 5, body);
+        pixelRect(16, 18, 10, 4, '#dcfce7');
+      }
 
       const stepOffset = attacking ? 0 : (walkPose < 2 ? 2 : -1);
       pixelRect(10 + stepOffset, 52, 10, 4, bodyDark);
@@ -1229,7 +1444,20 @@
       pixelRect(22, 37, 5, 2, bodyDark);
       pixelRect(24, 39, 3, 2, bodyDark);
 
-      if (attacking) {
+      if (m.type === 'mage') {
+        pixelRect(6, 31, 6, 10, bodyDark);
+        pixelRect(38, 31, 6, 10, bodyDark);
+        pixelRect(3, 33, 4, 8, '#ede9fe');
+        pixelRect(43, 33, 4, 8, '#ede9fe');
+        if (attacking) {
+          pixelRect(42, 24, 5, 16, '#e9d5ff');
+          pixelRect(46, 20, 4, 4, '#fef08a');
+          ctx.globalAlpha = 0.8;
+          pixelRect(48, 16, 4, 4, '#c4b5fd');
+          pixelRect(50, 22, 3, 3, '#ddd6fe');
+          ctx.globalAlpha = 1;
+        }
+      } else if (attacking) {
         const windup = attackT < 0.42;
         const armX = windup ? 35 : 39;
         const armY = windup ? 33 : 29;
@@ -1267,6 +1495,25 @@
         ctx.fillRect(screenX - barWidth / 2, barY, barWidth, 5);
         ctx.fillStyle = m.isBoss && !easterState.relicCollected ? '#a855f7' : (hpPercent > 0.5 ? '#22c55e' : '#ef4444');
         ctx.fillRect(screenX - barWidth / 2, barY, barWidth * hpPercent, 5);
+      });
+    }
+
+    function drawEnemyProjectiles() {
+      enemyProjectiles.forEach(projectile => {
+        const x = worldToScreenX(projectile.x);
+        if (x < -30 || x > CANVAS_WIDTH + 30) return;
+
+        ctx.save();
+        ctx.globalAlpha = 0.9;
+        ctx.fillStyle = projectile.glow;
+        ctx.beginPath();
+        ctx.arc(x, projectile.y, projectile.radius, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = projectile.color;
+        ctx.beginPath();
+        ctx.arc(x, projectile.y, projectile.radius * 0.58, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.restore();
       });
     }
 
@@ -1592,7 +1839,8 @@
       if (state.attackBoostTimer > 0) {
         state.attackBoostTimer -= step;
         if (state.attackBoostTimer <= 0) {
-          state.attackPower = 1;
+          state.tempAttackBonus = 0;
+          syncAttackPower();
         }
       }
 
@@ -1739,6 +1987,7 @@
 
       // Update monsters
       updateMonsters(step);
+      updateEnemyProjectiles(step);
 
       // Update particles
       updateParticles(step);
@@ -1933,6 +2182,7 @@
 
       // Draw monsters (behind player)
       drawMonsters();
+      drawEnemyProjectiles();
 
       // Draw particles (in front of monsters, behind player)
       drawParticles();
@@ -1941,11 +2191,11 @@
 
       // Player HP
       ctx.fillStyle = 'rgba(15, 23, 42, 0.55)';
-      ctx.fillRect(18, 18, 114, 12);
+      ctx.fillRect(18, 18, 138, 12);
       ctx.fillStyle = '#334155';
-      ctx.fillRect(22, 22, 106, 4);
+      ctx.fillRect(22, 22, 130, 4);
       ctx.fillStyle = state.hp > 2 ? '#22c55e' : '#ef4444';
-      ctx.fillRect(22, 22, 106 * (state.hp / state.maxHp), 4);
+      ctx.fillRect(22, 22, 130 * (state.hp / state.maxHp), 4);
 
       ctx.font = '700 11px ui-monospace, SFMono-Regular, Menlo, monospace';
       ctx.fillStyle = state.attackBoostTimer > 0 ? '#facc15' : '#cbd5e1';
@@ -1960,6 +2210,13 @@
       }
       ctx.fillStyle = '#e2e8f0';
       ctx.fillText(`${Math.round(state.x / METER_TO_WORLD)}米`, 22, 48);
+      ctx.fillText(`等级 ${state.level}`, 84, 48);
+      ctx.fillStyle = '#334155';
+      ctx.fillRect(18, 56, 138, 7);
+      ctx.fillStyle = '#60a5fa';
+      ctx.fillRect(18, 56, 138 * (state.exp / state.nextExp), 7);
+      ctx.fillStyle = '#dbeafe';
+      ctx.fillText(`经验 ${state.exp}/${state.nextExp}`, 22, 66);
 
       drawLevelHud();
 
