@@ -468,7 +468,8 @@
       fragilePlatforms: {},
       alertText: '',
       alertTimer: 0,
-      alertColor: '#fef08a'
+      alertColor: '#fef08a',
+      standingPlatformId: null
     };
 
     const easterState = {
@@ -497,9 +498,9 @@
       if (level >= 3) {
         platforms.push({
           id: 'moving-a',
-          x: 220 + Math.sin(phase * 0.8) * 58,
-          y: GROUND_Y - 112,
-          width: 96,
+          worldX: 220 + Math.sin(phase * 0.8) * 44,
+          y: GROUND_Y - 72,
+          width: 118,
           type: 'moving'
         });
       }
@@ -507,9 +508,9 @@
       if (level >= 4) {
         platforms.push({
           id: 'moving-b',
-          x: 430 + Math.cos(phase * 0.65) * 72,
-          y: GROUND_Y - 186,
-          width: 88,
+          worldX: 438 + Math.cos(phase * 0.65) * 64,
+          y: GROUND_Y - 136,
+          width: 96,
           type: 'moving'
         });
       }
@@ -517,7 +518,7 @@
       if (level >= 6) {
         platforms.push({
           id: 'fragile-a',
-          x: 610,
+          worldX: 610,
           y: GROUND_Y - 138,
           width: 94,
           type: 'fragile'
@@ -527,17 +528,14 @@
       if (level >= 8) {
         platforms.push({
           id: 'fragile-b',
-          x: 320,
+          worldX: 320,
           y: GROUND_Y - 252,
           width: 78,
           type: 'fragile'
         });
       }
 
-      return platforms.map(platform => ({
-        ...platform,
-        worldX: camera.x + platform.x
-      }));
+      return platforms;
     }
 
     function worldToScreenX(x) {
@@ -1043,8 +1041,9 @@
     function drawStagePlatforms() {
       const platforms = getStagePlatforms(levelState.level, performance.now ? performance.now() : Date.now());
       platforms.forEach(platform => {
-        const x = Math.round(platform.x);
+        const x = Math.round(worldToScreenX(platform.worldX));
         const y = Math.round(platform.y);
+        if (x + platform.width < -32 || x > CANVAS_WIDTH + 32) return;
         ctx.save();
         if (platform.type === 'moving') {
           ctx.fillStyle = '#0f766e';
@@ -2464,8 +2463,11 @@
       state.y += state.vy * step;
 
       // Ground / platform collision
-      const activePlatforms = getAllPlatforms(performance.now ? performance.now() : Date.now());
+      const platformTime = performance.now ? performance.now() : Date.now();
+      const activePlatforms = getAllPlatforms(platformTime);
+      const previousPlatforms = getAllPlatforms(platformTime - deltaMs);
       let landed = false;
+      state.standingPlatformId = null;
       if (state.vy >= 0) {
         for (let i = 0; i < activePlatforms.length; i++) {
           const platform = activePlatforms[i];
@@ -2483,6 +2485,7 @@
             state.y = platformSupportY;
             state.vy = 0;
             state.isGrounded = true;
+            state.standingPlatformId = platform.id || null;
             if (platform.type === 'fragile') {
               state.fragilePlatforms[platform.id] = (state.fragilePlatforms[platform.id] || 0) + step;
             }
@@ -2496,11 +2499,21 @@
         state.y = GROUND_Y;
         state.vy = 0;
         state.isGrounded = true;
+        state.standingPlatformId = null;
         landed = true;
       }
 
       if (!landed) {
         state.isGrounded = false;
+        state.standingPlatformId = null;
+      }
+
+      if (landed && state.standingPlatformId) {
+        const currentPlatform = activePlatforms.find(platform => platform.id === state.standingPlatformId);
+        const previousPlatform = previousPlatforms.find(platform => platform.id === state.standingPlatformId);
+        if (currentPlatform && previousPlatform && currentPlatform.type === 'moving') {
+          state.x += currentPlatform.worldX - previousPlatform.worldX;
+        }
       }
 
       Object.keys(state.fragilePlatforms).forEach((id) => {
