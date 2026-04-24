@@ -1425,7 +1425,35 @@
         radius: 10,
         color: monster.palette.accent,
         glow: monster.palette.mid,
-        damage: monster.damage
+        damage: monster.damage,
+        bossProjectile: !!monster.isStageBoss
+      });
+    }
+
+    function spawnBossVolley(monster) {
+      const baseSpeed = monster.palette.projectileSpeed || 5.4;
+      [-0.22, 0, 0.22].forEach((spread) => {
+        const projectileX = monster.x + monster.facing * 24;
+        const projectileY = monster.y - 36;
+        const dx = state.x - projectileX;
+        const dy = (state.y - SPRITE_DRAW_HEIGHT * 0.55) - projectileY;
+        const distance = Math.hypot(dx, dy) || 1;
+        const nx = dx / distance;
+        const ny = dy / distance;
+        const vx = nx * baseSpeed - ny * spread * baseSpeed;
+        const vy = ny * baseSpeed + nx * spread * baseSpeed;
+        enemyProjectiles.push({
+          x: projectileX,
+          y: projectileY,
+          vx,
+          vy,
+          life: 140,
+          radius: 11,
+          color: monster.palette.accent,
+          glow: monster.palette.mid,
+          damage: monster.damage,
+          bossProjectile: true
+        });
       });
     }
 
@@ -1543,12 +1571,20 @@
 
           if (!m.hasAttackHit && m.attackTimer >= attackHitFrame) {
             if (m.attackStyle === 'ranged') {
-              spawnEnemyProjectile(m);
+              if (m.isStageBoss) {
+                spawnBossVolley(m);
+              } else {
+                spawnEnemyProjectile(m);
+              }
             } else {
               const hitDx = Math.abs(state.x - (m.x + m.facing * 18));
               const hitDy = Math.abs(state.y - m.y);
               if (hitDx <= (m.attackRange || MONSTER_ATTACK_RANGE) && hitDy < 76) {
                 hitPlayer(m.x, m.isBoss ? state.maxHp / 2 : m.damage);
+                if (m.isStageBoss && m.type === 'stageBossBrute') {
+                  state.x += m.facing * 46;
+                  createCollisionParticles(state.x, state.y, '#fb923c');
+                }
               }
             }
             m.hasAttackHit = true;
@@ -1860,7 +1896,23 @@
     }
 
     function getUpgradeCardRects() {
-      const cardWidth = Math.min(220, CANVAS_WIDTH - 70);
+      const isCompact = CANVAS_WIDTH < 720;
+      if (isCompact) {
+        const cardWidth = Math.min(260, CANVAS_WIDTH - 44);
+        const cardHeight = 88;
+        const gap = 10;
+        const totalHeight = cardHeight * 3 + gap * 2;
+        const startY = CANVAS_HEIGHT / 2 - totalHeight / 2 + 8;
+        return [0, 1, 2].map(index => ({
+          x: CANVAS_WIDTH / 2 - cardWidth / 2,
+          y: startY + index * (cardHeight + gap),
+          width: cardWidth,
+          height: cardHeight,
+          compact: true
+        }));
+      }
+
+      const cardWidth = Math.min(220, (CANVAS_WIDTH - 96) / 3);
       const gap = 16;
       const totalWidth = cardWidth * 3 + gap * 2;
       const startX = CANVAS_WIDTH / 2 - totalWidth / 2;
@@ -1869,7 +1921,8 @@
         x: startX + index * (cardWidth + gap),
         y,
         width: cardWidth,
-        height: 136
+        height: 136,
+        compact: false
       }));
     }
 
@@ -1902,11 +1955,33 @@
         ctx.fillText(`${index + 1}`, rect.x + 22, rect.y + 14);
         ctx.textAlign = 'left';
         ctx.fillStyle = '#f8fafc';
-        ctx.font = '800 18px ui-monospace, SFMono-Regular, Menlo, monospace';
-        ctx.fillText(option.title, rect.x + 18, rect.y + 48);
+        ctx.font = rect.compact
+          ? '800 16px ui-monospace, SFMono-Regular, Menlo, monospace'
+          : '800 18px ui-monospace, SFMono-Regular, Menlo, monospace';
+        ctx.fillText(option.title, rect.x + 18, rect.y + (rect.compact ? 34 : 48));
         ctx.fillStyle = '#dbeafe';
-        ctx.font = '700 13px ui-monospace, SFMono-Regular, Menlo, monospace';
-        ctx.fillText(option.desc, rect.x + 18, rect.y + 80);
+        ctx.font = rect.compact
+          ? '700 12px ui-monospace, SFMono-Regular, Menlo, monospace'
+          : '700 13px ui-monospace, SFMono-Regular, Menlo, monospace';
+        const descY = rect.compact ? rect.y + 56 : rect.y + 80;
+        const descWidth = rect.width - 34;
+        const words = option.desc.split('');
+        let line = '';
+        let row = 0;
+        for (let i = 0; i < words.length; i++) {
+          const test = line + words[i];
+          if (ctx.measureText(test).width > descWidth && line) {
+            ctx.fillText(line, rect.x + 18, descY + row * 16);
+            line = words[i];
+            row++;
+            if (row > (rect.compact ? 1 : 2)) break;
+          } else {
+            line = test;
+          }
+        }
+        if (line && row <= (rect.compact ? 1 : 2)) {
+          ctx.fillText(line, rect.x + 18, descY + row * 16);
+        }
         ctx.textAlign = 'center';
       });
 
@@ -2278,7 +2353,7 @@
       if (!state.isAttacking && !state.isDancing) {
         state.isWalking = walk;
         const speedMultiplier = state.speedBoostTimer > 0 ? 1.35 : 1;
-        const speed = (walk ? SPEED_WALK : SPEED_RUN) * speedMultiplier;
+        const speed = ((walk ? SPEED_WALK : SPEED_RUN) + state.levelSpeedBonus) * speedMultiplier;
 
         if (left && !right) {
           state.vx = -speed;
