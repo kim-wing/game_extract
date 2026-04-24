@@ -699,6 +699,7 @@
       levelState.transitionTimer = 0;
       levelState.bannerTimer = 130;
       levelState.bannerText = `第 ${level} 关`;
+      enemyProjectiles.length = 0;
       monsterSpawnTimer = Math.max(0, config.spawnInterval - 35);
     }
 
@@ -1531,12 +1532,14 @@
         if (levelState.transitionTimer <= 0) {
           startLevel(levelState.level + 1);
         }
+      } else if (levelState.phase === 'playing' && isBossLevel(levelState.level)) {
+        if (!levelState.bossSpawned && aliveMonsters === 0) {
+          spawnStageBoss(levelState.level);
+        } else if (levelState.bossSpawned && aliveMonsters === 0) {
+          clearLevel();
+        }
       } else if (levelState.phase === 'playing' && levelState.kills >= levelState.targetKills && aliveMonsters === 0) {
         clearLevel();
-      } else if (levelState.phase === 'playing' && isBossLevel(levelState.level)) {
-        if (aliveMonsters === 0 && !levelState.bossSpawned) {
-          spawnStageBoss(levelState.level);
-        }
       } else if (levelState.phase === 'playing' && levelState.kills < levelState.targetKills && aliveMonsters < config.maxMonsters) {
         monsterSpawnTimer += step;
         if (monsterSpawnTimer >= config.spawnInterval) {
