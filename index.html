@@ -455,13 +455,17 @@
       nextExp: 6,
       baseAttack: 1,
       levelAttackBonus: 0,
+      levelSpeedBonus: 0,
       tempAttackBonus: 0,
       attackPower: 1,
       attackBoostTimer: 0,
       speedBoostTimer: 0,
+      pendingLevelUps: 0,
+      upgradeOptions: [],
       pickupText: '',
       pickupTextTimer: 0,
       levelFlashTimer: 0,
+      fragilePlatforms: {},
       alertText: '',
       alertTimer: 0,
       alertColor: '#fef08a'
@@ -486,6 +490,56 @@
     ];
     const relicGoalPlatform = relicPlatforms[relicPlatforms.length - 1];
 
+    function getStagePlatforms(level, time) {
+      const phase = time / 32;
+      const platforms = [];
+
+      if (level >= 3) {
+        platforms.push({
+          id: 'moving-a',
+          x: 220 + Math.sin(phase * 0.8) * 58,
+          y: GROUND_Y - 112,
+          width: 96,
+          type: 'moving'
+        });
+      }
+
+      if (level >= 4) {
+        platforms.push({
+          id: 'moving-b',
+          x: 430 + Math.cos(phase * 0.65) * 72,
+          y: GROUND_Y - 186,
+          width: 88,
+          type: 'moving'
+        });
+      }
+
+      if (level >= 6) {
+        platforms.push({
+          id: 'fragile-a',
+          x: 610,
+          y: GROUND_Y - 138,
+          width: 94,
+          type: 'fragile'
+        });
+      }
+
+      if (level >= 8) {
+        platforms.push({
+          id: 'fragile-b',
+          x: 320,
+          y: GROUND_Y - 252,
+          width: 78,
+          type: 'fragile'
+        });
+      }
+
+      return platforms.map(platform => ({
+        ...platform,
+        worldX: camera.x + platform.x
+      }));
+    }
+
     function worldToScreenX(x) {
       return x - camera.x;
     }
@@ -504,6 +558,7 @@
       transitionTimer: 0,
       bannerTimer: 150,
       bannerText: '第 1 关',
+      bossSpawned: false,
       seenTypes: {
         sprout: true
       }
@@ -513,6 +568,90 @@
       state.alertText = text;
       state.alertColor = color;
       state.alertTimer = duration;
+    }
+
+    function isUpgradeMenuOpen() {
+      return state.upgradeOptions.length > 0;
+    }
+
+    const UPGRADE_POOL = [
+      {
+        id: 'atk',
+        title: '锋刃',
+        desc: '攻击 +1',
+        apply: () => {
+          state.levelAttackBonus += 1;
+        }
+      },
+      {
+        id: 'hp',
+        title: '铁骨',
+        desc: '生命上限 +2，回复 2 点',
+        apply: () => {
+          state.maxHp += 2;
+          state.hp = Math.min(state.maxHp, state.hp + 2);
+        }
+      },
+      {
+        id: 'speed',
+        title: '疾步',
+        desc: '移动速度小幅提升',
+        apply: () => {
+          state.levelSpeedBonus += 0.2;
+        }
+      },
+      {
+        id: 'heal',
+        title: '回春',
+        desc: '立即回复 3 点生命',
+        apply: () => {
+          state.hp = Math.min(state.maxHp, state.hp + 3);
+        }
+      },
+      {
+        id: 'jump',
+        title: '飞跃',
+        desc: '升级时额外回复，并提升跳跃手感',
+        apply: () => {
+          state.maxHp += 1;
+          state.hp = Math.min(state.maxHp, state.hp + 1);
+          state.pickupText = '跳跃强化';
+          state.pickupTextTimer = 80;
+        }
+      }
+    ];
+
+    function rollUpgradeOptions() {
+      const pool = [...UPGRADE_POOL];
+      const options = [];
+      while (pool.length > 0 && options.length < 3) {
+        const index = Math.floor(Math.random() * pool.length);
+        options.push(pool.splice(index, 1)[0]);
+      }
+      return options;
+    }
+
+    function openNextUpgradeMenu() {
+      if (state.pendingLevelUps <= 0 || isUpgradeMenuOpen()) return;
+      state.pendingLevelUps -= 1;
+      state.upgradeOptions = rollUpgradeOptions();
+      showAlert('升级三选一', '#93c5fd', 90);
+    }
+
+    function applyUpgradeChoice(index) {
+      if (!isUpgradeMenuOpen()) return;
+      const option = state.upgradeOptions[index];
+      if (!option) return;
+      option.apply();
+      syncAttackPower();
+      state.pickupText = `${option.title} 已获得`;
+      state.pickupTextTimer = 100;
+      state.levelFlashTimer = 70;
+      createCollisionParticles(state.x, state.y - SPRITE_DRAW_HEIGHT * 0.55, '#93c5fd');
+      state.upgradeOptions = [];
+      if (state.pendingLevelUps > 0) {
+        openNextUpgradeMenu();
+      }
     }
 
     function syncAttackPower() {
@@ -531,18 +670,15 @@
         state.exp -= state.nextExp;
         state.level++;
         state.nextExp = Math.round(state.nextExp * 1.4) + 2;
-        state.maxHp += 1;
-        state.hp = Math.min(state.maxHp, state.hp + 2);
-        if (state.level % 2 === 0) {
-          state.levelAttackBonus += 1;
-        }
-        syncAttackPower();
         state.pickupText = `升级 Lv.${state.level}`;
         state.pickupTextTimer = 110;
         state.levelFlashTimer = 60;
-        showAlert(`升级！生命提升到 ${state.maxHp}`, '#93c5fd', 90);
+        state.pendingLevelUps += 1;
+        showAlert('升级，选择一项强化', '#93c5fd', 90);
         createCollisionParticles(state.x, state.y - SPRITE_DRAW_HEIGHT * 0.55, '#93c5fd');
       }
+
+      openNextUpgradeMenu();
     }
 
     function getLevelConfig(level) {
@@ -560,8 +696,9 @@
       const config = getLevelConfig(level);
       levelState.level = level;
       levelState.kills = 0;
-      levelState.targetKills = config.targetKills;
+      levelState.targetKills = isBossLevel(level) ? 1 : config.targetKills;
       levelState.phase = 'playing';
+      levelState.bossSpawned = false;
       levelState.transitionTimer = 0;
       levelState.bannerTimer = 130;
       levelState.bannerText = `第 ${level} 关`;
@@ -627,6 +764,7 @@
       state.hp = state.maxHp;
       state.baseAttack = 1;
       state.levelAttackBonus = 0;
+      state.levelSpeedBonus = 0;
       state.tempAttackBonus = 0;
       state.attackPower = 1;
       state.attackBoostTimer = 0;
@@ -634,6 +772,7 @@
       state.pickupText = '';
       state.pickupTextTimer = 0;
       state.levelFlashTimer = 0;
+      state.fragilePlatforms = {};
       state.alertText = '';
       state.alertTimer = 0;
       state.alertColor = '#fef08a';
@@ -901,6 +1040,44 @@
       });
     }
 
+    function drawStagePlatforms() {
+      const platforms = getStagePlatforms(levelState.level, performance.now ? performance.now() : Date.now());
+      platforms.forEach(platform => {
+        const x = Math.round(platform.x);
+        const y = Math.round(platform.y);
+        ctx.save();
+        if (platform.type === 'moving') {
+          ctx.fillStyle = '#0f766e';
+          ctx.fillRect(x, y, platform.width, PLATFORM_HEIGHT);
+          ctx.fillStyle = '#99f6e4';
+          for (let i = 6; i < platform.width - 6; i += 18) {
+            ctx.fillRect(x + i, y + 4, 10, 4);
+          }
+        } else {
+          const fragileState = state.fragilePlatforms[platform.id] || 0;
+          ctx.globalAlpha = fragileState > 0 ? Math.max(0.35, 1 - fragileState / 90) : 1;
+          ctx.fillStyle = '#7c2d12';
+          ctx.fillRect(x, y, platform.width, PLATFORM_HEIGHT);
+          ctx.fillStyle = '#fdba74';
+          for (let i = 6; i < platform.width - 6; i += 18) {
+            ctx.fillRect(x + i, y + 4, 10, 4);
+          }
+        }
+        ctx.restore();
+      });
+    }
+
+    function getAllPlatforms(time) {
+      const stagePlatforms = getStagePlatforms(levelState.level, time).filter(platform => {
+        if (platform.type !== 'fragile') return true;
+        return (state.fragilePlatforms[platform.id] || 0) < 90;
+      });
+      return [
+        ...relicPlatforms.map(platform => ({ ...platform, worldX: platform.x })),
+        ...stagePlatforms
+      ];
+    }
+
     // Monster system
     const monsters = [];
     let monsterSpawnTimer = 0;
@@ -1004,6 +1181,35 @@
         accent: '#8b5cf6',
         cheek: '#bfdbfe'
       },
+      stageBossBrute: {
+        name: '岩角王',
+        hpBonus: 6,
+        speedMul: 0.92,
+        expReward: 10,
+        attackStyle: 'slam',
+        attackRange: MONSTER_ATTACK_RANGE + 18,
+        damageMul: 2.2,
+        color: '#fdba74',
+        mid: '#fed7aa',
+        dark: '#c2410c',
+        accent: '#fb923c',
+        cheek: '#fde68a'
+      },
+      stageBossMage: {
+        name: '夜魇术师',
+        hpBonus: 5,
+        speedMul: 0.9,
+        expReward: 14,
+        attackStyle: 'ranged',
+        attackRange: 320,
+        damageMul: 1.8,
+        projectileSpeed: 5.3,
+        color: '#a78bfa',
+        mid: '#ddd6fe',
+        dark: '#5b21b6',
+        accent: '#c084fc',
+        cheek: '#bfdbfe'
+      },
       boss: {
         name: '大王',
         hpBonus: 0,
@@ -1024,6 +1230,50 @@
       if (level >= 3 && roll < 0.68) return 'berry';
       if (level >= 2 && roll < 0.86) return 'dewdrop';
       return 'sprout';
+    }
+
+    function isBossLevel(level) {
+      return level === 5 || level === 10;
+    }
+
+    function spawnStageBoss(level) {
+      if (levelState.bossSpawned) return;
+      levelState.bossSpawned = true;
+      const config = getLevelConfig(level);
+      const type = level === 5 ? 'stageBossBrute' : 'stageBossMage';
+      const palette = MONSTER_TYPES[type];
+      const hp = config.monsterHp + palette.hpBonus + 8;
+
+      monsters.push({
+        type,
+        palette,
+        x: camera.x + CANVAS_WIDTH + 120,
+        y: GROUND_Y - MONSTER_FOOT_OFFSET,
+        vx: -palette.speedMul,
+        speed: config.monsterSpeed * palette.speedMul,
+        facing: -1,
+        hp,
+        maxHp: hp,
+        attackStyle: palette.attackStyle,
+        attackRange: palette.attackRange,
+        damage: Math.max(2, Math.round(config.monsterDamage * palette.damageMul)),
+        expReward: palette.expReward,
+        isStageBoss: true,
+        isDead: false,
+        isAttacking: false,
+        flashTimer: 0,
+        stunTimer: 0,
+        collisionFxTimer: 0,
+        attackTimer: 0,
+        attackCooldown: 25,
+        hasAttackHit: false,
+        animTimer: 0,
+        animFrame: 0,
+        state: 'walk',
+        drawScale: 2.2
+      });
+
+      showAlert(level === 5 ? '第 5 关首领 岩角王登场' : '第 10 关首领 夜魇术师登场', palette.accent, 150);
     }
 
     function spawnMonster() {
@@ -1224,6 +1474,10 @@
         }
       } else if (levelState.phase === 'playing' && levelState.kills >= levelState.targetKills && aliveMonsters === 0) {
         clearLevel();
+      } else if (levelState.phase === 'playing' && isBossLevel(levelState.level)) {
+        if (aliveMonsters === 0 && !levelState.bossSpawned) {
+          spawnStageBoss(levelState.level);
+        }
       } else if (levelState.phase === 'playing' && levelState.kills < levelState.targetKills && aliveMonsters < config.maxMonsters) {
         monsterSpawnTimer += step;
         if (monsterSpawnTimer >= config.spawnInterval) {
@@ -1520,10 +1774,14 @@
         const hpPercent = m.hp / m.maxHp;
         ctx.fillStyle = '#1f2937';
         const screenX = worldToScreenX(m.x);
-        const barWidth = m.isBoss ? 86 : 50;
-        const barY = m.y - (m.isBoss ? 150 : MONSTER_HEIGHT + 8);
+        const barWidth = m.isBoss ? 86 : m.isStageBoss ? 110 : 50;
+        const barY = m.y - (m.isBoss ? 150 : m.isStageBoss ? 132 : MONSTER_HEIGHT + 8);
         ctx.fillRect(screenX - barWidth / 2, barY, barWidth, 5);
-        ctx.fillStyle = m.isBoss && !easterState.relicCollected ? '#a855f7' : (hpPercent > 0.5 ? '#22c55e' : '#ef4444');
+        ctx.fillStyle = m.isBoss && !easterState.relicCollected
+          ? '#a855f7'
+          : m.isStageBoss
+            ? '#f97316'
+            : (hpPercent > 0.5 ? '#22c55e' : '#ef4444');
         ctx.fillRect(screenX - barWidth / 2, barY, barWidth * hpPercent, 5);
       });
     }
@@ -1597,6 +1855,60 @@
         ctx.font = '700 11px ui-monospace, SFMono-Regular, Menlo, monospace';
         ctx.fillText(subtitle, CANVAS_WIDTH / 2, 135);
       }
+
+      ctx.restore();
+    }
+
+    function getUpgradeCardRects() {
+      const cardWidth = Math.min(220, CANVAS_WIDTH - 70);
+      const gap = 16;
+      const totalWidth = cardWidth * 3 + gap * 2;
+      const startX = CANVAS_WIDTH / 2 - totalWidth / 2;
+      const y = CANVAS_HEIGHT / 2 - 64;
+      return [0, 1, 2].map(index => ({
+        x: startX + index * (cardWidth + gap),
+        y,
+        width: cardWidth,
+        height: 136
+      }));
+    }
+
+    function drawUpgradeMenu() {
+      if (!isUpgradeMenuOpen()) return;
+
+      const rects = getUpgradeCardRects();
+      ctx.save();
+      ctx.fillStyle = 'rgba(2, 6, 23, 0.72)';
+      ctx.fillRect(0, 0, CANVAS_WIDTH, CANVAS_HEIGHT);
+      ctx.textAlign = 'center';
+      ctx.fillStyle = '#f8fafc';
+      ctx.font = '800 24px ui-monospace, SFMono-Regular, Menlo, monospace';
+      ctx.fillText('升级三选一', CANVAS_WIDTH / 2, 104);
+      ctx.fillStyle = '#cbd5e1';
+      ctx.font = '700 12px ui-monospace, SFMono-Regular, Menlo, monospace';
+      ctx.fillText('按 1 / 2 / 3 选择', CANVAS_WIDTH / 2, 126);
+
+      state.upgradeOptions.forEach((option, index) => {
+        const rect = rects[index];
+        ctx.fillStyle = 'rgba(15, 23, 42, 0.92)';
+        ctx.fillRect(rect.x, rect.y, rect.width, rect.height);
+        ctx.strokeStyle = '#60a5fa';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(rect.x, rect.y, rect.width, rect.height);
+        ctx.fillStyle = '#93c5fd';
+        ctx.fillRect(rect.x + 10, rect.y + 10, 24, 24);
+        ctx.fillStyle = '#f8fafc';
+        ctx.font = '800 18px ui-monospace, SFMono-Regular, Menlo, monospace';
+        ctx.fillText(`${index + 1}`, rect.x + 22, rect.y + 14);
+        ctx.textAlign = 'left';
+        ctx.fillStyle = '#f8fafc';
+        ctx.font = '800 18px ui-monospace, SFMono-Regular, Menlo, monospace';
+        ctx.fillText(option.title, rect.x + 18, rect.y + 48);
+        ctx.fillStyle = '#dbeafe';
+        ctx.font = '700 13px ui-monospace, SFMono-Regular, Menlo, monospace';
+        ctx.fillText(option.desc, rect.x + 18, rect.y + 80);
+        ctx.textAlign = 'center';
+      });
 
       ctx.restore();
     }
@@ -1711,6 +2023,9 @@
       if (e.code === 'KeyR' && (levelState.phase === 'gameover' || levelState.phase === 'won')) {
         restartGame();
       }
+      if (e.code === 'Digit1') applyUpgradeChoice(0);
+      if (e.code === 'Digit2') applyUpgradeChoice(1);
+      if (e.code === 'Digit3') applyUpgradeChoice(2);
       
       // Prevent scrolling with arrow keys and space
       if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) {
@@ -1836,6 +2151,26 @@
       btnRestart.addEventListener('mousedown', restart);
     }
 
+    canvas.addEventListener('pointerdown', (e) => {
+      if (!isUpgradeMenuOpen()) return;
+      const rect = canvas.getBoundingClientRect();
+      const scaleX = CANVAS_WIDTH / rect.width;
+      const scaleY = CANVAS_HEIGHT / rect.height;
+      const x = (e.clientX - rect.left) * scaleX;
+      const y = (e.clientY - rect.top) * scaleY;
+      const cards = getUpgradeCardRects();
+      const index = cards.findIndex(card =>
+        x >= card.x &&
+        x <= card.x + card.width &&
+        y >= card.y &&
+        y <= card.y + card.height
+      );
+      if (index >= 0) {
+        e.preventDefault();
+        applyUpgradeChoice(index);
+      }
+    });
+
     window.addEventListener('blur', () => {
       keys['ArrowLeft'] = false;
       keys['ArrowRight'] = false;
@@ -1863,6 +2198,20 @@
 
       if (levelState.phase === 'won') {
         updateVictoryDance(deltaMs, step);
+        return;
+      }
+
+      if (isUpgradeMenuOpen()) {
+        updateParticles(step);
+        if (state.pickupTextTimer > 0) {
+          state.pickupTextTimer -= step;
+        }
+        if (state.levelFlashTimer > 0) {
+          state.levelFlashTimer -= step;
+        }
+        if (state.alertTimer > 0) {
+          state.alertTimer -= step;
+        }
         return;
       }
 
@@ -1977,14 +2326,16 @@
       state.y += state.vy * step;
 
       // Ground / platform collision
+      const activePlatforms = getAllPlatforms(performance.now ? performance.now() : Date.now());
       let landed = false;
       if (state.vy >= 0) {
-        for (let i = 0; i < relicPlatforms.length; i++) {
-          const platform = relicPlatforms[i];
+        for (let i = 0; i < activePlatforms.length; i++) {
+          const platform = activePlatforms[i];
           const platformTop = platform.y;
           const platformSupportY = platformTop + PLAYER_PLATFORM_OFFSET;
-          const platformLeft = platform.x - SPRITE_DRAW_WIDTH * 0.22;
-          const platformRight = platform.x + platform.width + SPRITE_DRAW_WIDTH * 0.22;
+          const platformBaseX = platform.worldX != null ? platform.worldX : platform.x;
+          const platformLeft = platformBaseX - SPRITE_DRAW_WIDTH * 0.22;
+          const platformRight = platformBaseX + platform.width + SPRITE_DRAW_WIDTH * 0.22;
           if (
             state.x >= platformLeft &&
             state.x <= platformRight &&
@@ -1994,6 +2345,9 @@
             state.y = platformSupportY;
             state.vy = 0;
             state.isGrounded = true;
+            if (platform.type === 'fragile') {
+              state.fragilePlatforms[platform.id] = (state.fragilePlatforms[platform.id] || 0) + step;
+            }
             landed = true;
             break;
           }
@@ -2010,6 +2364,15 @@
       if (!landed) {
         state.isGrounded = false;
       }
+
+      Object.keys(state.fragilePlatforms).forEach((id) => {
+        if (state.fragilePlatforms[id] > 0) {
+          state.fragilePlatforms[id] += landed ? 0 : step * 1.8;
+          if (state.fragilePlatforms[id] > 140) {
+            delete state.fragilePlatforms[id];
+          }
+        }
+      });
 
       const actualMove = state.x - oldX;
       updateCamera();
@@ -2216,6 +2579,7 @@
       ctx.lineTo(CANVAS_WIDTH, GROUND_Y + FRAME_HEIGHT / 2);
       ctx.stroke();
 
+      drawStagePlatforms();
       drawRelicPlatforms();
 
       // Draw monsters (behind player)
@@ -2368,6 +2732,8 @@
         ctx.fillText(state.pickupText, worldToScreenX(state.x), state.y - SPRITE_DRAW_HEIGHT - 18);
         ctx.restore();
       }
+
+      drawUpgradeMenu();
 
       // Debug info (optional)
       // ctx.fillStyle = '#fff';
